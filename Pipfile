@@ -6,6 +6,9 @@ verify_ssl = true
 [dev-packages]
 
 [packages]
+Django = "==2.2.2"
+channels = "*"
+channels-redis = "*"
 
 [requires]
 python_version = "3.7"
