@@ -66,7 +66,7 @@ A single variable can be bound and contain anything that json supports.
 Client:
 ```json5
 {
-  "type": "variable",
+  "type": "var",
   "op": "get",
   "name": "..."
 }
@@ -75,7 +75,7 @@ Client:
 Server:
 ```json5
 {
-  "type": "variable",
+  "type": "var",
   "op": "update",
   "name": "...",
   "value": "..."
@@ -178,7 +178,7 @@ left by using the `unsubscribe` websocket type:
 
 ```json5
 {
-  "type": "...",             // variable, list, or function
+  "type": "...",             // var or list
   "op": "unsubscribe",
   "name": "...",
   "id": "..."                // Optional, use for list item
@@ -190,10 +190,10 @@ Or unsubscribe form all updates:
   "type": "unsubscribe_all"
 }
 ```
-You can also subscribe to a variable without getting it's value:
+You can also subscribe to data without getting it's value:
 ```json5
 {
-  "type": "...",             // variable, list, or function
+  "type": "...",             // var or list
   "op": "subscribe",
   "name": "...",
   "id": "..."                // Optional, use for list items
@@ -204,7 +204,7 @@ You can also subscribe to a variable without getting it's value:
 Errors for unknown variables, lists, or functions:
 ```json5
 {
-  "type": "...",             // variable, list, or function
+  "type": "...",             // var, list, or function
   "op": "error",
   "name": "...",
   "id": "...",               // Optional, use for list items
