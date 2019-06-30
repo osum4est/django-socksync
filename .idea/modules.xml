@@ -2,7 +2,7 @@
 <project version="4">
   <component name="ProjectModuleManager">
     <modules>
-      <module fileurl="file://$PROJECT_DIR$/../socksync-django/.idea/socksync-django.iml" filepath="$PROJECT_DIR$/../socksync-django/.idea/socksync-django.iml" />
+      <module fileurl="file://$PROJECT_DIR$/.idea/django-socksync.iml" filepath="$PROJECT_DIR$/.idea/django-socksync.iml" />
     </modules>
   </component>
 </project>
