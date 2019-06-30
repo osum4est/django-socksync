@@ -67,7 +67,7 @@ Client:
 ```json5
 {
   "type": "variable",
-  "operation": "get",
+  "op": "get",
   "name": "..."
 }
 ```
@@ -76,7 +76,7 @@ Server:
 ```json5
 {
   "type": "variable",
-  "operation": "update",
+  "op": "update",
   "name": "...",
   "value": "..."
 }
@@ -91,7 +91,7 @@ Client:
 ```json5
 {
   "type": "list",
-  "operation": "get",
+  "op": "get",
   "name": "...",
   "id": "..."  // Optional, use if you just want one item in a list. An update operation will be returned
 }
@@ -103,7 +103,7 @@ Send the initial whole list:
 ```json5
 {
   "type": "list",
-  "operation": "update_all",
+  "op": "update_all",
   "name": "...",
   "items": [
     {
@@ -118,7 +118,7 @@ Add an item:
 ```json5
 {
   "type": "list",
-  "operation": "add",
+  "op": "add",
   "name": "...",
   "id": "...",
   "value": "..."
@@ -129,7 +129,7 @@ Update an item:
 ```json5
 {
   "type": "list",
-  "operation": "update",
+  "op": "update",
   "name": "...",
   "id": "...",
   "value": "..."
@@ -140,7 +140,7 @@ Delete an item:
 ```json5
 {
   "type": "list",
-  "operation": "delete",
+  "op": "delete",
   "name": "...",
   "id": "..."
 }
@@ -153,7 +153,7 @@ Call a function:
 ```json5
 {
   "type": "function",
-  "operation": "call",
+  "op": "call",
   "name": "...",
   "args": {
     "...": "..."
@@ -165,7 +165,7 @@ Return from a function:
 ```json5
 {
   "type": "function",
-  "operation": "return",
+  "op": "return",
   "name": "...",
   "value": "..."
 }
@@ -179,7 +179,7 @@ left by using the `unsubscribe` websocket type:
 ```json5
 {
   "type": "...",             // variable, list, or function
-  "operation": "unsubscribe",
+  "op": "unsubscribe",
   "name": "...",
   "id": "..."                // Optional, use for list item
 }
@@ -194,7 +194,7 @@ You can also subscribe to a variable without getting it's value:
 ```json5
 {
   "type": "...",             // variable, list, or function
-  "operation": "subscribe",
+  "op": "subscribe",
   "name": "...",
   "id": "..."                // Optional, use for list items
 }
@@ -205,7 +205,7 @@ Errors for unknown variables, lists, or functions:
 ```json5
 {
   "type": "...",             // variable, list, or function
-  "operation": "error",
+  "op": "error",
   "name": "...",
   "id": "...",               // Optional, use for list items
   "message": "..."           // Optional, use for more descriptive error messages
