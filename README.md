@@ -51,6 +51,7 @@ application = ProtocolTypeRouter({
 Install and start redis:
 ```
 (macOS): brew install redis && brew services start redis
+(linux): sudo apt install redis && sudo service redis-server start
 ```
 
 ## Usage
@@ -66,8 +67,8 @@ A single variable can be bound and contain anything that json supports.
 Client:
 ```json5
 {
+  "func": "get",
   "type": "var",
-  "op": "get",
   "name": "..."
 }
 ```
@@ -75,8 +76,8 @@ Client:
 Server:
 ```json5
 {
+  "func": "update",
   "type": "var",
-  "op": "update",
   "name": "...",
   "value": "..."
 }
@@ -90,10 +91,10 @@ can be handled by passing the id of related field with each list item and making
 Client:
 ```json5
 {
+  "func": "get",
   "type": "list",
-  "op": "get",
   "name": "...",
-  "id": "..."  // Optional, use if you just want one item in a list. An update operation will be returned
+  "id": "..."  // Optional, use if you just want one item in a list. An update func will be returned
 }
 ```
 
@@ -102,8 +103,8 @@ Server:
 Send the initial whole list:
 ```json5
 {
+  "func": "update_all",
   "type": "list",
-  "op": "update_all",
   "name": "...",
   "items": [
     {
@@ -117,8 +118,8 @@ Send the initial whole list:
 Add an item:
 ```json5
 {
+  "func": "add",
   "type": "list",
-  "op": "add",
   "name": "...",
   "id": "...",
   "value": "..."
@@ -128,8 +129,8 @@ Add an item:
 Update an item:
 ```json5
 {
+  "func": "update",
   "type": "list",
-  "op": "update",
   "name": "...",
   "id": "...",
   "value": "..."
@@ -139,8 +140,8 @@ Update an item:
 Delete an item:
 ```json5
 {
+  "func": "delete",
   "type": "list",
-  "op": "delete",
   "name": "...",
   "id": "..."
 }
@@ -152,8 +153,8 @@ Functions can be used to call a function on the server from the client or vise v
 Call a function:
 ```json5
 {
+  "func": "call",
   "type": "function",
-  "op": "call",
   "name": "...",
   "args": {
     "...": "..."
@@ -164,8 +165,8 @@ Call a function:
 Return from a function:
 ```json5
 {
+  "func": "return",
   "type": "function",
-  "op": "return",
   "name": "...",
   "value": "..."
 }
@@ -174,27 +175,27 @@ Return from a function:
 ### Subscriptions
 A websocket by default will receive no data updates. A client must first be subscribed to an update group to start
 receiving updates. This will happen automatically the first time it requests data by it's name. A group can be
-left by using the `unsubscribe` websocket type:
+left by using the `unsubscribe` websocket func:
 
 ```json5
 {
+  "func": "unsubscribe",
   "type": "...",             // var or list
-  "op": "unsubscribe",
   "name": "...",
   "id": "..."                // Optional, use for list item
 }
 ```
-Or unsubscribe form all updates:
+Or unsubscribe from all updates:
 ```json5
 {
-  "type": "unsubscribe_all"
+  "func": "unsubscribe_all"
 }
 ```
 You can also subscribe to data without getting it's value:
 ```json5
 {
+  "func": "subscribe",
   "type": "...",             // var or list
-  "op": "subscribe",
   "name": "...",
   "id": "..."                // Optional, use for list items
 }
@@ -204,8 +205,8 @@ You can also subscribe to data without getting it's value:
 Errors for unknown variables, lists, or functions:
 ```json5
 {
+  "func": "error",
   "type": "...",             // var, list, or function
-  "op": "error",
   "name": "...",
   "id": "...",               // Optional, use for list items
   "message": "..."           // Optional, use for more descriptive error messages
@@ -215,7 +216,7 @@ Errors for unknown variables, lists, or functions:
 General error for malformed requests or other problems:
 ```json5
 {
-  "type": "error",
+  "func": "error",
   "message": "..."
 }
 ```
