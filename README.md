@@ -61,7 +61,7 @@ Currently data can only be bound one way: server → client, since this library 
 a client updated with information from the server. Data can be sent from the client to the server through the use of
 functions.
 
-### Bound Variables
+### Variables
 A single variable can be bound and contain anything that json supports.
 
 Client:
@@ -83,7 +83,7 @@ Server:
 }
 ```
 
-### Bound Lists
+### Lists
 If a list or database table is requested from the server, the server can provide change updates instead of sending 
 the whole list each time it updates. This requires each object in the array to have a unique "id" field. Related tables
 can be handled by passing the id of related field with each list item and making separate variable/list calls.
@@ -147,7 +147,7 @@ Delete an item:
 }
 ```
 
-### Bound Functions
+### Functions
 Functions can be used to call a function on the server from the client or vise versa with arguments.
 
 Call a function:
