@@ -174,13 +174,20 @@ Return from a function:
 
 ### Subscriptions
 A websocket by default will receive no data updates. A client must first be subscribed to an update group to start
-receiving updates. This will happen automatically the first time it requests data by it's name. A group can be
-left by using the `unsubscribe` websocket func:
-
+receiving updates:
+```json5
+{
+  "func": "subscribe",
+  "type": "...",             // var, list, or function
+  "name": "...",
+  "id": "..."                // Optional, use for list items
+}
+```
+To leave a group and stop receiving updates:
 ```json5
 {
   "func": "unsubscribe",
-  "type": "...",             // var or list
+  "type": "...",             // var, list, or function
   "name": "...",
   "id": "..."                // Optional, use for list item
 }
@@ -189,15 +196,6 @@ Or unsubscribe from all updates:
 ```json5
 {
   "func": "unsubscribe_all"
-}
-```
-You can also subscribe to data without getting it's value:
-```json5
-{
-  "func": "subscribe",
-  "type": "...",             // var or list
-  "name": "...",
-  "id": "..."                // Optional, use for list items
 }
 ```
 
