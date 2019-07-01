@@ -17,7 +17,7 @@ class SockSyncConsumer(WebsocketConsumer):
         for group in self._socket_groups:
             group.remove_socket(self)
 
-    def receive(self, text_data=None, bytes_data=None):
+    def receive(self, text_data=None, byte_data=None):
         try:
             request = json.loads(text_data)
         except JSONDecodeError:
@@ -25,81 +25,76 @@ class SockSyncConsumer(WebsocketConsumer):
             return
 
         self.do_request(request)
-        # async_to_sync(self.channel_layer.group_send)(
-        #     get_group_name(request),
-        #     {
-        #         'type': 'test',
-        #         'hi': socksync.__get("hi")
-        #     }
-        # )
 
     def do_request(self, request):
-        if "type" not in request:
-            self.send_general_error("Type is required.")
+        if "func" not in request:
+            self.send_general_error("func is required.")
             return
         else:
-            type = request["type"]
+            func = request["func"]
 
-        if type == "error":
+        if func == "error":
             return
 
-        if type == "unsubscribe_all":
+        if func == "unsubscribe_all":
             # TODO
             return
 
+        if "type" not in request:
+            self.send_general_error("type is required.")
+            return
+        else:
+            type_ = request["type"]
+
         if "name" not in request:
-            self.send_general_error("Name is required.")
+            self.send_general_error("name is required.")
             return
         else:
             name = request["name"]
 
-        if "op" not in request:
-            self.send_general_error("Operation is required.")
-            return
-        else:
-            op = request["op"]
-
-        id = None
-        if "id" in request:
-            id = request["id"]
-
-        if op == "error":
-            return
-
-        if op == "subscribe":
-            # TODO
-            return
-
-        if op == "unsubscribe":
-            # TODO
-            return
-
-        if type == "var":
-            if op == "get":
-                if name in registry.variables:
-                    self.send_update(registry.variables[name])
-                    self._socket_groups.add(registry.variables[name])
-                    registry.variables[name].add_socket(self)
-                else:
-                    self.send_type_error("var", name)
-            else:
-                self.send_general_error("Unsupported operation for var.")
+        if type_ == "var" and name in registry.variables:
+            self.handle_func(func, type_, registry.variables, name, request)
+        elif type_ == "list":
+            self.handle_func(func, type_, registry.lists, name, request)
+        elif type_ == "function":
+            self.handle_func(func, type_, registry.functions, name, request)
         else:
             self.send_general_error("Unsupported type.")
 
-    def send_update(self, socket_group):
-        self.send(json.dumps(socket_group.to_json("update")))
+    def handle_func(self, func, type_, socket_groups, name, data):
+        if name in socket_groups:
+            socket_group = socket_groups[name]
 
-    def send_type_error(self, type, name, id=None):
-        self.send(json.dumps(dict_without_none({
-            "type": type,
-            "op": "error",
+            if func == "subscribe":
+                self._socket_groups.add(socket_group)
+                socket_group.add_socket(self)
+                return
+            elif func == "unsubscribe":
+                self._socket_groups.remove(socket_group)
+                socket_group.remove_socket(self)
+                return
+
+            data = socket_group.handle_func(func, data)
+            if data is not None:
+                self.send_json(data)
+        else:
+            self.send_name_error(type_, name)
+
+    def send_name_error(self, type_, name, id_=None):
+        self.send_json({
+            "func": "error",
+            "type": type_,
             "name": name,
-            "id": id
-        })))
+            "id": id_
+        }, True)
 
     def send_general_error(self, message):
-        self.send(json.dumps({
-            "type": "error",
+        self.send_json({
+            "func": "error",
             "message": message
-        }))
+        })
+
+    def send_json(self, data, strip_none=False):
+        if strip_none:
+            data = dict_without_none(data)
+        self.send(json.dumps(data))
