@@ -1,6 +1,6 @@
 import json
 from json import JSONDecodeError
-from typing import Set
+from typing import Set, Dict
 
 from channels.generic.websocket import WebsocketConsumer
 
@@ -15,10 +15,10 @@ class SockSyncConsumer(WebsocketConsumer):
     def connect(self):
         self.accept()
 
-    def disconnect(self, code):
+    def disconnect(self, _):
         self.unsubscribe_all()
 
-    def receive(self, text_data=None, byte_data=None):
+    def receive(self, text_data: dict = None, _=None):
         try:
             request = json.loads(text_data)
         except JSONDecodeError:
@@ -27,7 +27,7 @@ class SockSyncConsumer(WebsocketConsumer):
 
         self.do_request(request)
 
-    def do_request(self, request):
+    def do_request(self, request: dict):
         if "func" not in request:
             self.send_general_error("func is required.")
             return
@@ -67,7 +67,7 @@ class SockSyncConsumer(WebsocketConsumer):
             group.remove_socket(self)
         self._socket_groups.clear()
 
-    def handle_func(self, func, type_, socket_groups, name, data):
+    def handle_func(self, func: str, type_: str, socket_groups: Dict[str, SockSyncSocketGroup], name: str, data: map):
         if name in socket_groups:
             socket_group = socket_groups[name]
 
@@ -86,7 +86,7 @@ class SockSyncConsumer(WebsocketConsumer):
         else:
             self.send_name_error(type_, name)
 
-    def send_name_error(self, type_, name, id_=None):
+    def send_name_error(self, type_: str, name: str, id_: str = None):
         self.send_json({
             "func": "error",
             "type": type_,
@@ -94,13 +94,13 @@ class SockSyncConsumer(WebsocketConsumer):
             "id": id_
         }, True)
 
-    def send_general_error(self, message):
+    def send_general_error(self, message: str):
         self.send_json({
             "func": "error",
             "message": message
         })
 
-    def send_json(self, data, strip_none=False):
+    def send_json(self, data: dict, strip_none: bool = False):
         if strip_none:
             data = dict_without_none(data)
         self.send(json.dumps(data))

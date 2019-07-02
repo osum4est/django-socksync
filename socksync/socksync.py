@@ -29,6 +29,5 @@ def register_list(ss_list: SockSyncList):
 
 
 # TODO: Paging, filtering
-# TODO: Type hint everything
 # TODO: Two way binding
 # TODO: Web dashboard showing all registered vars
