@@ -1,21 +1,22 @@
 import json
 from json import JSONDecodeError
+from typing import Set
 
 from channels.generic.websocket import WebsocketConsumer
 
 from socksync import registry
+from socksync.socksync_socket_group import SockSyncSocketGroup
 from socksync.utils import dict_without_none
 
 
 class SockSyncConsumer(WebsocketConsumer):
-    _socket_groups = set()
+    _socket_groups: Set[SockSyncSocketGroup] = set()
 
     def connect(self):
         self.accept()
 
     def disconnect(self, code):
-        for group in self._socket_groups:
-            group.remove_socket(self)
+        self.unsubscribe_all()
 
     def receive(self, text_data=None, byte_data=None):
         try:
@@ -37,7 +38,7 @@ class SockSyncConsumer(WebsocketConsumer):
             return
 
         if func == "unsubscribe_all":
-            # TODO
+            self.unsubscribe_all()
             return
 
         if "type" not in request:
@@ -60,6 +61,11 @@ class SockSyncConsumer(WebsocketConsumer):
             self.handle_func(func, type_, registry.functions, name, request)
         else:
             self.send_general_error("Unsupported type.")
+
+    def unsubscribe_all(self):
+        for group in self._socket_groups:
+            group.remove_socket(self)
+        self._socket_groups.clear()
 
     def handle_func(self, func, type_, socket_groups, name, data):
         if name in socket_groups:
