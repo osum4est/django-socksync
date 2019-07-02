@@ -29,5 +29,4 @@ def register_list(ss_list: SockSyncList):
 
 
 # TODO: Paging, filtering
-# TODO: Two way binding
 # TODO: Web dashboard showing all registered vars

@@ -10,7 +10,7 @@ It uses channels + redis, so those must be set up as well in order for the libra
 These libraries will handle all the websocket communication for you and make binding to data easier:
 * [vue-socksync](https://github.com/osum4est/vue-socksync)
 
-## Setup
+## Server Setup
 Install:
 ```
 pip install django-socksync
@@ -54,17 +54,26 @@ Install and start redis:
 (linux): sudo apt install redis && sudo service redis-server start
 ```
 
+## Client Setup
+
 ## Usage
 
 ## Protocol Overview
-Currently data can only be bound one way: server → client, since this library is mainly intended to be used for keeping
-a client updated with information from the server. Data can be sent from the client to the server through the use of
-functions.
+Every message must at least include a `func` parameter that tells the other side of the connection what to do. The 
+`type` parameter is used to describe what type of data we performing the function on. `name` refers to the name of the
+data. By default neither side of the connection receives any updates or function calls from the other side. To receive
+these they must be subscribed to. Every function should work on both the client and the server, so data can by synced
+bidirectionally. 
+
+**Note**: All requests that attempt to modify data (`update`, `update_all`, `add`, `delete`, and function calls) are
+ignored if the receiver of the request hasn't subscribed to that item. This should be checked on both sides, in the case
+of a nonconforming client. This ensures that data only gets updated if that side allows it to. Keep in mind that this
+causes `get` to only work if that side has first subscribed to that data.
 
 ### Variables
 A single variable can be bound and contain anything that json supports.
 
-Client:
+Request a parameter:
 ```json5
 {
   "func": "get",
@@ -73,7 +82,7 @@ Client:
 }
 ```
 
-Server:
+Update the value of a parameter or respond to a `get` request:
 ```json5
 {
   "func": "update",
@@ -84,11 +93,11 @@ Server:
 ```
 
 ### Lists
-If a list or database table is requested from the server, the server can provide change updates instead of sending 
-the whole list each time it updates. This requires each object in the array to have a unique "id" field. Related tables
-can be handled by passing the id of related field with each list item and making separate variable/list calls.
+If a list or database table is requested, a change update update can be provided instead of sending the whole list each 
+time it updates. This requires each object in the array to have a unique "id" field. Related tables can be handled by 
+passing the id of related field with each list item and making separate variable/list calls.
 
-Client:
+Request a list:
 ```json5
 {
   "func": "get",
@@ -98,9 +107,7 @@ Client:
 }
 ```
 
-Server:
-
-Send the initial whole list:
+Update the entire list or respond to a `get` request. This should *replace* the existing list:
 ```json5
 {
   "func": "update_all",
@@ -148,7 +155,8 @@ Delete an item:
 ```
 
 ### Functions
-Functions can be used to call a function on the server from the client or vise versa with arguments.
+Functions can be used to call a function on the server from the client or vise versa with arguments. Note that a
+function on the server will only be called if the server subscribes to it on all the clients that should have access.
 
 Call a function:
 ```json5
@@ -173,7 +181,7 @@ Return from a function:
 ```
 
 ### Subscriptions
-A websocket by default will receive no data updates. A client must first be subscribed to an update group to start
+A websocket by default will receive no data updates. A side must first be subscribed to an update group to start 
 receiving updates:
 ```json5
 {
@@ -183,6 +191,7 @@ receiving updates:
   "id": "..."                // Optional, use for list items
 }
 ```
+
 To leave a group and stop receiving updates:
 ```json5
 {
@@ -192,6 +201,7 @@ To leave a group and stop receiving updates:
   "id": "..."                // Optional, use for list item
 }
 ```
+
 Or unsubscribe from all updates:
 ```json5
 {
