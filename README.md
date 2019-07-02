@@ -36,12 +36,12 @@ CHANNEL_LAYERS = {
 
 Create routing.py in the main app module next to urls.py:
 ```python
-from socksync import consumers
+from socksync.sockets import SockSyncConsumer
 
 application = ProtocolTypeRouter({
     'websocket': AuthMiddlewareStack(
         URLRouter([
-            path('ws/socksync/', consumers.SockSyncConsumer),
+            path('ws/socksync/', SockSyncConsumer),
             # You could add your own websocket routes here if you need custom ones
         ])
     )
