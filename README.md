@@ -164,6 +164,7 @@ Call a function:
   "func": "call",
   "type": "function",
   "name": "...",
+  "id": "...",               // Should be a unique uuid in order to match up the right return to the call
   "args": {
     "...": "..."
   }
@@ -176,6 +177,7 @@ Return from a function:
   "func": "return",
   "type": "function",
   "name": "...",
+  "id": "...",               // Should match the one provided in the call func
   "value": "..."
 }
 ```
