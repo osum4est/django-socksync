@@ -12,8 +12,6 @@ _SockSyncVariable = 'SockSyncVariable'
 _SockSyncGroup = 'SockSyncGroup'
 
 
-# TODO: Rename update to set
-
 class SockSyncSocket(ABC):
     @abstractmethod
     def register_variable(self, var: _SockSyncVariable):

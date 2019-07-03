@@ -99,8 +99,8 @@ class SockSyncVariable(SockSyncGroup, Generic[T]):
     # TODO: Type checking
     def handle_func(self, func: str, data: dict = None, socket: _SockSyncSocket = None) -> dict:
         if func == "get":
-            return dict(func="update", value=self.value, **self.to_json())
-        elif func == "update" and "value" in data and socket.subscribed(self):
+            return dict(func="set", value=self.value, **self.to_json())
+        elif func == "set" and "value" in data and socket.subscribed(self):
             with self._lock:
                 self._value = data["value"]
             self.send_json_to_others(self.handle_func("get"), socket)

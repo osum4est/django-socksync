@@ -61,14 +61,14 @@ Install and start redis:
 ## Protocol Overview
 Every message must at least include a `func` parameter that tells the other side of the connection what to do. The 
 `type` parameter is used to describe what type of data we performing the function on. `name` refers to the name of the
-data. By default neither side of the connection receives any updates or function calls from the other side. To receive
+data. By default neither side of the connection receives any sets or function calls from the other side. To receive
 these they must be subscribed to. Every function should work on both the client and the server, so data can by synced
 bidirectionally. 
 
-**Note**: All requests that attempt to modify data (`update`, `update_all`, `add`, `delete`, and function calls) are
-ignored if the receiver of the request hasn't subscribed to that item. This should be checked on both sides, in the case
-of a nonconforming client. This ensures that data only gets updated if that side allows it to. Keep in mind that this
-causes `get` to only work if that side has first subscribed to that data.
+**Note**: All requests that attempt to modify data (`set`, `set_all`, `add`, `delete`, and function calls) are ignored 
+if the receiver of the request hasn't subscribed to that item. This should be checked on both sides, in the case of a 
+nonconforming client. This ensures that data only gets changed if that side allows it to. Keep in mind that this causes 
+`get` to only work if that side has first subscribed to that data.
 
 ### Variables
 A single variable can be bound and contain anything that json supports.
@@ -82,10 +82,10 @@ Request a parameter:
 }
 ```
 
-Update the value of a parameter or respond to a `get` request:
+Set the value of a parameter or respond to a `get` request:
 ```json5
 {
-  "func": "update",
+  "func": "set",
   "type": "var",
   "name": "...",
   "value": "..."
@@ -93,9 +93,9 @@ Update the value of a parameter or respond to a `get` request:
 ```
 
 ### Lists
-If a list or database table is requested, a change update update can be provided instead of sending the whole list each 
-time it updates. This requires each object in the array to have a unique "id" field. Related tables can be handled by 
-passing the id of related field with each list item and making separate variable/list calls.
+If a list or database table is requested, a change func can be provided instead of sending the whole list each time it 
+changes. This requires each object in the array to have a unique "id" field. Related tables can be handled by passing 
+the id of related field with each list item and making separate variable/list calls.
 
 Request a list:
 ```json5
@@ -103,14 +103,14 @@ Request a list:
   "func": "get",
   "type": "list",
   "name": "...",
-  "id": "..."  // Optional, use if you just want one item in a list. An update func will be returned
+  "id": "..."  // Optional, use if you just want one item in a list. A set func will be returned
 }
 ```
 
-Update the entire list or respond to a `get` request. This should *replace* the existing list:
+Set the entire list or respond to a `get` request. This should *replace* the existing list:
 ```json5
 {
-  "func": "update_all",
+  "func": "set_all",
   "type": "list",
   "name": "...",
   "items": [
@@ -133,10 +133,10 @@ Add an item:
 }
 ```
 
-Update an item:
+Change an item:
 ```json5
 {
-  "func": "update",
+  "func": "set",
   "type": "list",
   "name": "...",
   "id": "...",
