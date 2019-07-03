@@ -8,25 +8,27 @@ from channels.generic.websocket import WebsocketConsumer
 from socksync import socksync
 from socksync.utils import dict_without_none
 
-SockSyncVariable = 'SockSyncVariable'
-SockSyncGroup = 'SockSyncGroup'
+_SockSyncVariable = 'SockSyncVariable'
+_SockSyncGroup = 'SockSyncGroup'
 
+
+# TODO: Rename update to set
 
 class SockSyncSocket(ABC):
     @abstractmethod
-    def register_variable(self, var: SockSyncVariable):
+    def register_variable(self, var: _SockSyncVariable):
         pass
 
     @abstractmethod
-    def subscribed(self, group: SockSyncGroup) -> bool:
+    def subscribed(self, group: _SockSyncGroup) -> bool:
         pass
 
     @abstractmethod
-    def subscribe(self, group: SockSyncGroup):
+    def subscribe(self, group: _SockSyncGroup):
         pass
 
     @abstractmethod
-    def unsubscribe(self, group: SockSyncGroup):
+    def unsubscribe(self, group: _SockSyncGroup):
         pass
 
     @abstractmethod
@@ -35,21 +37,20 @@ class SockSyncSocket(ABC):
 
 
 class SockSyncConsumer(WebsocketConsumer, SockSyncSocket):
-    _subscriber_groups: Set[SockSyncGroup] = set()
-    _subscription_groups: Set[SockSyncGroup] = set()
+    _subscriber_groups: Set[_SockSyncGroup] = set()
+    _subscription_groups: Set[_SockSyncGroup] = set()
 
-    _variables: Dict[str, SockSyncGroup] = {}
-    _lists: Dict[str, SockSyncGroup] = {}
-    _functions: Dict[str, SockSyncGroup] = {}
+    _variables: Dict[str, _SockSyncGroup] = {}
+    _lists: Dict[str, _SockSyncGroup] = {}
+    _functions: Dict[str, _SockSyncGroup] = {}
 
-    def register_variable(self, var: SockSyncVariable):
+    def register_variable(self, var: _SockSyncVariable):
         self._variables[var.name] = var
 
     def connect(self):
+        self.accept()
         if socksync.on_new_connection is not None:
             socksync.on_new_connection(self)
-
-        self.accept()
 
     def disconnect(self, _):
         self.remove_all_subscribers()
@@ -101,16 +102,16 @@ class SockSyncConsumer(WebsocketConsumer, SockSyncSocket):
         else:
             self.send_general_error("Unsupported type.")
 
-    def handle_func(self, func: str, type_: str, socket_groups: Dict[str, SockSyncGroup], name: str, data: map):
+    def handle_func(self, func: str, type_: str, socket_groups: Dict[str, _SockSyncGroup], name: str, data: map):
         if name in socket_groups:
             socket_group = socket_groups[name]
 
             if func == "subscribe":
-                self._subscriber_add(socket_group)
+                self._subscriber_groups.add(socket_group)
                 socket_group.add_subscriber_socket(self)
                 return
             elif func == "unsubscribe":
-                self._subscriber_remove(socket_group)
+                self._subscriber_groups.remove(socket_group)
                 socket_group.remove_subscriber_socket(self)
                 return
 
@@ -120,25 +121,25 @@ class SockSyncConsumer(WebsocketConsumer, SockSyncSocket):
         else:
             self.send_name_error(type_, name)
 
-    def subscribed(self, group: SockSyncGroup) -> bool:
+    def subscribed(self, group: _SockSyncGroup) -> bool:
         return group in self._subscription_groups
 
-    def subscribe(self, group: SockSyncGroup):
+    def subscribe(self, group: _SockSyncGroup):
         self.send_json(dict(func="subscribe", **group.to_json()))
-        self._subscription_add(group)
+        self._subscription_groups.add(group)
 
-    def unsubscribe(self, group: SockSyncGroup):
+    def unsubscribe(self, group: _SockSyncGroup):
         self.send_json(dict(func="unsubscribe", **group.to_json()))
-        self._subscription_remove(group)
+        self._subscription_groups.remove(group)
 
     def unsubscribe_all(self):
         self.send_json(dict(func="unsubscribe_all"))
-        self._subscription_clear()
+        self._subscription_groups.clear()
 
     def remove_all_subscribers(self):
         for group in self._subscriber_groups:
             group.remove_subscriber_socket(self)
-        self._subscriber_clear()
+        self._subscriber_groups.clear()
 
     def send_name_error(self, type_: str, name: str, id_: str = None):
         self.send_json({
