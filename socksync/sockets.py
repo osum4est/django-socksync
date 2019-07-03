@@ -36,12 +36,15 @@ class SockSyncSocket(ABC):
 
 # noinspection PyProtectedMember
 class SockSyncConsumer(WebsocketConsumer, SockSyncSocket):
-    _subscriber_groups: Set[_SockSyncGroup] = set()
-    _subscription_groups: Set[_SockSyncGroup] = set()
+    def __init__(self):
+        super().__init__()
 
-    _variables: Dict[str, _SockSyncGroup] = {}
-    _lists: Dict[str, _SockSyncGroup] = {}
-    _functions: Dict[str, _SockSyncGroup] = {}
+        self._subscriber_groups: Set[_SockSyncGroup] = set()
+        self._subscription_groups: Set[_SockSyncGroup] = set()
+
+        self._variables: Dict[str, _SockSyncGroup] = {}
+        self._lists: Dict[str, _SockSyncGroup] = {}
+        self._functions: Dict[str, _SockSyncGroup] = {}
 
     def register_variable(self, var: _SockSyncVariable):
         self._variables[var.name] = var

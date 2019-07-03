@@ -1,6 +1,6 @@
 from abc import ABC, abstractmethod
 from threading import Lock
-from typing import Set, cast, TypeVar, Generic
+from typing import Set, cast, TypeVar, Generic, Callable
 
 from django.db.models.signals import post_save
 
@@ -9,11 +9,11 @@ _SockSyncConsumer = 'SockSyncConsumer'
 
 
 class SockSyncGroup(ABC):
-    _subscriber_sockets: Set[_SockSyncSocket] = set()
-
     def __init__(self, name: str, type_: str):
         self._name: str = name
         self._type: str = type_
+
+        self._subscriber_sockets: Set[_SockSyncSocket] = set()
 
     @property
     def name(self) -> str:
@@ -49,32 +49,6 @@ class SockSyncGroup(ABC):
         }
 
 
-class SockSyncList(SockSyncGroup):
-    value = []
-
-    def get(self, index: int) -> object:
-        return self.value[index]
-
-    def set(self, index: int, value: object):
-        self.value[index] = value
-        # TODO: Update subscribers
-
-
-class SockSyncModelList(SockSyncList):
-    def __init__(self, model):
-        self.model = model
-        post_save.connect(self._model_post_save, sender=model)
-
-    def get(self, index: int) -> object:
-        pass
-
-    def set(self, index: int, value: object):
-        pass
-
-    def _model_post_save(self):
-        pass
-
-
 T = TypeVar('T')
 
 
@@ -102,3 +76,49 @@ class SockSyncVariable(SockSyncGroup, Generic[T]):
             with self._lock:
                 self._value = data["value"]
             self._send_json_to_others(self._handle_func("get"), socket)
+
+
+class SockSyncList(SockSyncGroup):
+    value = []
+
+    def get(self, index: int) -> object:
+        return self.value[index]
+
+    def set(self, index: int, value: object):
+        self.value[index] = value
+        # TODO: Update subscribers
+
+
+class SockSyncModelList(SockSyncList):
+    def __init__(self, model):
+        self.model = model
+        post_save.connect(self._model_post_save, sender=model)
+
+    def get(self, index: int) -> object:
+        pass
+
+    def set(self, index: int, value: object):
+        pass
+
+    def _model_post_save(self):
+        pass
+
+
+class SockSyncFunction(SockSyncGroup):
+    @stat
+    _calls = {}
+
+    def __init__(self, name: str, type_: str, function: Callable[[any], None]):
+        super().__init__(name, type_)
+        self.function = function
+
+    @staticmethod
+    def socksync_function(self, ):
+
+    def _handle_func(self, func: str, data: dict = None, socket: _SockSyncSocket = None) -> dict:
+        if func == "call" and socket.subscribed(self):
+            return dict(func="return", value=self.function(**data["args"]), id=data["id"], **self._to_json())
+        elif func == "return":
+            # TODO
+
+    async def hi(self):
