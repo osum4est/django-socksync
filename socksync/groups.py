@@ -23,27 +23,26 @@ class SockSyncGroup(ABC):
     def type(self) -> str:
         return self._type
 
-    # TODO: Hide these somehow
     @abstractmethod
-    def handle_func(self, func: str, data: dict = None, socket: _SockSyncSocket = None) -> dict:
+    def _handle_func(self, func: str, data: dict = None, socket: _SockSyncSocket = None) -> dict:
         pass
 
-    def add_subscriber_socket(self, socket: _SockSyncSocket):
+    def _add_subscriber_socket(self, socket: _SockSyncSocket):
         self._subscriber_sockets.add(socket)
 
-    def remove_subscriber_socket(self, socket: _SockSyncSocket):
+    def _remove_subscriber_socket(self, socket: _SockSyncSocket):
         self._subscriber_sockets.remove(socket)
 
-    def send_json_to_all(self, data: dict):
+    def _send_json_to_all(self, data: dict):
         for socket in self._subscriber_sockets:
             cast(_SockSyncConsumer, socket).send_json(data)
 
-    def send_json_to_others(self, data: dict, self_socket: _SockSyncSocket):
+    def _send_json_to_others(self, data: dict, self_socket: _SockSyncSocket):
         for socket in self._subscriber_sockets:
             if socket != self_socket:
                 cast(_SockSyncConsumer, socket).send_json(data)
 
-    def to_json(self) -> dict:
+    def _to_json(self) -> dict:
         return {
             "type": self._type,
             "name": self.name
@@ -94,13 +93,12 @@ class SockSyncVariable(SockSyncGroup, Generic[T]):
     def value(self, new_value: T):
         with self._lock:
             self._value = new_value
-        self.send_json_to_all(self.handle_func("get"))
+        self._send_json_to_all(self._handle_func("get"))
 
-    # TODO: Type checking
-    def handle_func(self, func: str, data: dict = None, socket: _SockSyncSocket = None) -> dict:
+    def _handle_func(self, func: str, data: dict = None, socket: _SockSyncSocket = None) -> dict:
         if func == "get" and (socket is None or socket.subscribed(self)):
-            return dict(func="set", value=self.value, **self.to_json())
+            return dict(func="set", value=self.value, **self._to_json())
         elif func == "set" and "value" in data and socket.subscribed(self):
             with self._lock:
                 self._value = data["value"]
-            self.send_json_to_others(self.handle_func("get"), socket)
+            self._send_json_to_others(self._handle_func("get"), socket)

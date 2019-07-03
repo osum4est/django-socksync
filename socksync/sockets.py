@@ -34,6 +34,7 @@ class SockSyncSocket(ABC):
         pass
 
 
+# noinspection PyProtectedMember
 class SockSyncConsumer(WebsocketConsumer, SockSyncSocket):
     _subscriber_groups: Set[_SockSyncGroup] = set()
     _subscription_groups: Set[_SockSyncGroup] = set()
@@ -106,14 +107,14 @@ class SockSyncConsumer(WebsocketConsumer, SockSyncSocket):
 
             if func == "subscribe":
                 self._subscriber_groups.add(socket_group)
-                socket_group.add_subscriber_socket(self)
+                socket_group._add_subscriber_socket(self)
                 return
             elif func == "unsubscribe":
                 self._subscriber_groups.remove(socket_group)
-                socket_group.remove_subscriber_socket(self)
+                socket_group._remove_subscriber_socket(self)
                 return
 
-            data = socket_group.handle_func(func, data, self)
+            data = socket_group._handle_func(func, data, self)
             if data is not None:
                 self.send_json(data)
         else:
@@ -123,11 +124,11 @@ class SockSyncConsumer(WebsocketConsumer, SockSyncSocket):
         return group in self._subscription_groups
 
     def subscribe(self, group: _SockSyncGroup):
-        self.send_json(dict(func="subscribe", **group.to_json()))
+        self.send_json(dict(func="subscribe", **group._to_json()))
         self._subscription_groups.add(group)
 
     def unsubscribe(self, group: _SockSyncGroup):
-        self.send_json(dict(func="unsubscribe", **group.to_json()))
+        self.send_json(dict(func="unsubscribe", **group._to_json()))
         self._subscription_groups.remove(group)
 
     def unsubscribe_all(self):
@@ -136,7 +137,7 @@ class SockSyncConsumer(WebsocketConsumer, SockSyncSocket):
 
     def remove_all_subscribers(self):
         for group in self._subscriber_groups:
-            group.remove_subscriber_socket(self)
+            group._remove_subscriber_socket(self)
         self._subscriber_groups.clear()
 
     def send_name_error(self, type_: str, name: str, id_: str = None):
