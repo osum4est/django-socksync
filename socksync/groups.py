@@ -1,6 +1,8 @@
+import time
 from abc import ABC, abstractmethod
 from threading import Lock
-from typing import Set, cast, TypeVar, Generic, Callable
+from typing import Set, cast, TypeVar, Generic, Callable, Dict, Optional
+from uuid import uuid4
 
 from django.db.models.signals import post_save
 
@@ -24,7 +26,7 @@ class SockSyncGroup(ABC):
         return self._type
 
     @abstractmethod
-    def _handle_func(self, func: str, data: dict = None, socket: _SockSyncSocket = None) -> dict:
+    def _handle_func(self, func: str, data: dict = None, socket: _SockSyncSocket = None) -> Optional[dict]:
         pass
 
     def _add_subscriber_socket(self, socket: _SockSyncSocket):
@@ -69,7 +71,8 @@ class SockSyncVariable(SockSyncGroup, Generic[T]):
             self._value = new_value
         self._send_json_to_all(self._handle_func("get"))
 
-    def _handle_func(self, func: str, data: dict = None, socket: _SockSyncSocket = None) -> dict:
+    def _handle_func(self, func: str, data: dict = None, socket: _SockSyncSocket = None) -> Optional[dict]:
+        # TODO: This is going through if socket is not subscribed
         if func == "get" and (socket is None or socket.subscribed(self)):
             return dict(func="set", value=self.value, **self._to_json())
         elif func == "set" and "value" in data and socket.subscribed(self):
@@ -105,20 +108,66 @@ class SockSyncModelList(SockSyncList):
 
 
 class SockSyncFunction(SockSyncGroup):
-    @stat
-    _calls = {}
+    _returns: Dict[str, dict] = {}
+    _ignore_returns: Set[str] = set()
+    _functions: Dict[Callable, 'SockSyncFunction'] = {}
 
-    def __init__(self, name: str, type_: str, function: Callable[[any], None]):
-        super().__init__(name, type_)
+    def __init__(self, name: str, function: Callable):
+        super().__init__(name, "function")
         self.function = function
+        self._functions[function] = self
 
     @staticmethod
-    def socksync_function(self, ):
+    def function(remote: bool):
+        def decorator(func: Callable):
+            def wrapper(**kwargs):
+                if remote:
+                    ss_func = SockSyncFunction._functions[wrapper]
+                    socket: _SockSyncConsumer = kwargs.get("socket", None)
 
-    def _handle_func(self, func: str, data: dict = None, socket: _SockSyncSocket = None) -> dict:
+                    id_ = str(uuid4())
+                    json = dict(
+                        **ss_func._to_json(),
+                        func="call",
+                        id=id_,
+                        args=kwargs)
+
+                    # Just call the function on each client and ignore returns
+                    if socket is None:
+                        for socket in ss_func._subscriber_sockets:
+                            SockSyncFunction._ignore_returns.add(id_)
+                            socket.send_json(json)
+                            id_ = str(uuid4())
+                            json["id"] = id_
+                        return
+
+                    # Call the function on the socket and wait for a response
+                    socket.send_json(json)
+                    while id_ not in SockSyncFunction._returns:
+                        time.sleep(.25)
+
+                    return_data = SockSyncFunction._returns[id_]
+                    SockSyncFunction._returns.pop(id_)
+
+                    return return_data
+                else:
+                    return func(**kwargs)
+
+            return wrapper
+
+        return decorator
+
+    def _handle_func(self, func: str, data: dict = None, socket: _SockSyncSocket = None) -> Optional[dict]:
+        if "id" not in data and socket is not None:
+            socket.send_general_error("id is required.")
+            return None
+
+        id_ = data["id"]
+
         if func == "call" and socket.subscribed(self):
-            return dict(func="return", value=self.function(**data["args"]), id=data["id"], **self._to_json())
+            return dict(**self._to_json(), func="return", id=id_, value=self.function(**data.get("args", {})))
         elif func == "return":
-            # TODO
-
-    async def hi(self):
+            if id_ in self._ignore_returns:
+                self._ignore_returns.remove(id_)
+            else:
+                self._returns[id_] = data.get("value", None)

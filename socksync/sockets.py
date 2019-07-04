@@ -8,13 +8,17 @@ from channels.generic.websocket import WebsocketConsumer
 from socksync import socksync
 from socksync.utils import dict_without_none
 
-_SockSyncVariable = 'SockSyncVariable'
 _SockSyncGroup = 'SockSyncGroup'
-
+_SockSyncVariable = 'SockSyncVariable'
+_SockSyncFunction = 'SockSyncFunction'
 
 class SockSyncSocket(ABC):
     @abstractmethod
     def register_variable(self, var: _SockSyncVariable):
+        pass
+    
+    @abstractmethod
+    def register_function(self, var: _SockSyncFunction):
         pass
 
     @abstractmethod
@@ -36,8 +40,8 @@ class SockSyncSocket(ABC):
 
 # noinspection PyProtectedMember
 class SockSyncConsumer(WebsocketConsumer, SockSyncSocket):
-    def __init__(self):
-        super().__init__()
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
 
         self._subscriber_groups: Set[_SockSyncGroup] = set()
         self._subscription_groups: Set[_SockSyncGroup] = set()
@@ -49,9 +53,12 @@ class SockSyncConsumer(WebsocketConsumer, SockSyncSocket):
     def register_variable(self, var: _SockSyncVariable):
         self._variables[var.name] = var
 
+    def register_function(self, function: _SockSyncFunction):
+        self._functions[function.name] = function
+
     def connect(self):
         self.accept()
-        if socksync.on_new_connection is not None:
+        if hasattr(socksync, "on_new_connection") and socksync.on_new_connection is not None:
             socksync.on_new_connection(self)
 
     def disconnect(self, _):
