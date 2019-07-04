@@ -157,6 +157,7 @@ Delete an item:
 ### Functions
 Functions can be used to call a function on the server from the client or vise versa with arguments. Note that a
 function on the server will only be called if the server subscribes to it on all the clients that should have access.
+A `return` is required to be sent anytime a side that's been subscribed to sends a `call`.
 
 Call a function:
 ```json5
@@ -178,7 +179,7 @@ Return from a function:
   "type": "function",
   "name": "...",
   "id": "...",               // Should match the one provided in the call func
-  "value": "..."
+  "value": "..."             // Optional, include if there is data to be returned
 }
 ```
 
