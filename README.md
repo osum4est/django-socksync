@@ -70,6 +70,8 @@ if the receiver of the request hasn't subscribed to that item. This should be ch
 nonconforming client. This ensures that data only gets changed if that side allows it to. Keep in mind that this causes 
 `get` to only work if that side has first subscribed to that data.
 
+**All fields are required unless marked otherwise!**
+
 ### Variables
 A single variable can be bound and contain anything that json supports.
 
@@ -166,7 +168,7 @@ Call a function:
   "type": "function",
   "name": "...",
   "id": "...",               // Should be a unique uuid in order to match up the right return to the call
-  "args": {
+  "args": {                  // Optional, use if needed
     "...": "..."
   }
 }
@@ -179,7 +181,7 @@ Return from a function:
   "type": "function",
   "name": "...",
   "id": "...",               // Should match the one provided in the call func
-  "value": "..."             // Optional, include if there is data to be returned
+  "value": "..."             // Optional, use if needed
 }
 ```
 
