@@ -134,10 +134,16 @@ class SockSyncConsumer(WebsocketConsumer, SockSyncSocket):
         return group in self._subscription_groups
 
     def subscribe(self, group: _SockSyncGroup):
+        if not group._subscribable:
+            raise Exception("Group is not subscribable!")
+
         self.send_json(dict(func="subscribe", **group._to_json()))
         self._subscription_groups.add(group)
 
     def unsubscribe(self, group: _SockSyncGroup):
+        if not group._subscribable:
+            raise Exception("Group is not subscribable!")
+
         self.send_json(dict(func="unsubscribe", **group._to_json()))
         self._subscription_groups.remove(group)
 

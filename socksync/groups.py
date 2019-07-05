@@ -1,6 +1,6 @@
 import time
 from abc import ABC, abstractmethod
-from threading import Lock
+from threading import Lock, Thread
 from typing import Set, cast, TypeVar, Generic, Callable, Dict, Optional
 from uuid import uuid4
 
@@ -16,6 +16,7 @@ class SockSyncGroup(ABC):
         self._type: str = type_
 
         self._subscriber_sockets: Set[_SockSyncSocket] = set()
+        self._subscribable = True
 
     @property
     def name(self) -> str:
@@ -107,55 +108,72 @@ class SockSyncModelList(SockSyncList):
         pass
 
 
-class SockSyncFunction(SockSyncGroup):
-    _returns: Dict[str, dict] = {}
-    _ignore_returns: Set[str] = set()
-    _functions: Dict[Callable, 'SockSyncFunction'] = {}
-
-    def __init__(self, name: str, function: Callable):
+class SockSyncFunction(SockSyncGroup, ABC):
+    def __init__(self, name: str):
         super().__init__(name, "function")
+
+
+class SockSyncFunctionRemote(SockSyncFunction):
+    def __init__(self, name: str):
+        super().__init__(name)
+        self._subscribable = False
+        self._returns: Dict[str, dict] = {}
+        self._ignore_returns: Set[str] = set()
+
+    def call_remote_blocking(self, socket: _SockSyncSocket, **kwargs):
+        if not socket.subscribed(self):
+            return None
+           
+        id_ = str(uuid4())
+        json = dict(
+            **self._to_json(),
+            func="call",
+            id=id_,
+            args=kwargs)
+
+        socket.send_json(json)
+        while id_ not in self._returns:
+            time.sleep(.25)
+
+        return_data = self._returns[id_]
+        self._returns.pop(id_)
+
+        return return_data
+
+    def call_remote_all(self, **kwargs):
+        id_ = str(uuid4())
+        json = dict(
+            **self._to_json(),
+            func="call",
+            id=id_,
+            args=kwargs)
+
+        for socket in self._subscriber_sockets:
+            self._ignore_returns.add(id_)
+            socket.send_json(json)
+            id_ = str(uuid4())
+            json["id"] = id_
+
+    def _handle_func(self, func: str, data: dict = None, socket: _SockSyncSocket = None) -> Optional[dict]:
+        if "id" not in data and socket is not None:
+            socket.send_general_error("id is required.")
+            return None
+
+        id_ = data["id"]
+
+        if func == "call":
+            return dict(**self._to_json(), func="return", id=id_, value="Function is not callable!")
+        elif func == "return":
+            if id_ in self._ignore_returns:
+                self._ignore_returns.remove(id_)
+            else:
+                self._returns[id_] = data.get("value", None)
+
+
+class SockSyncFunctionLocal(SockSyncFunction):
+    def __init__(self, name: str, function: Callable = None):
+        super().__init__(name)
         self.function = function
-        self._functions[function] = self
-
-    @staticmethod
-    def function(remote: bool):
-        def decorator(func: Callable):
-            def wrapper(**kwargs):
-                if remote:
-                    ss_func = SockSyncFunction._functions[wrapper]
-                    socket: _SockSyncConsumer = kwargs.get("socket", None)
-
-                    id_ = str(uuid4())
-                    json = dict(
-                        **ss_func._to_json(),
-                        func="call",
-                        id=id_,
-                        args=kwargs)
-
-                    # Just call the function on each client and ignore returns
-                    if socket is None:
-                        for socket in ss_func._subscriber_sockets:
-                            SockSyncFunction._ignore_returns.add(id_)
-                            socket.send_json(json)
-                            id_ = str(uuid4())
-                            json["id"] = id_
-                        return
-
-                    # Call the function on the socket and wait for a response
-                    socket.send_json(json)
-                    while id_ not in SockSyncFunction._returns:
-                        time.sleep(.25)
-
-                    return_data = SockSyncFunction._returns[id_]
-                    SockSyncFunction._returns.pop(id_)
-
-                    return return_data
-                else:
-                    return func(**kwargs)
-
-            return wrapper
-
-        return decorator
 
     def _handle_func(self, func: str, data: dict = None, socket: _SockSyncSocket = None) -> Optional[dict]:
         if "id" not in data and socket is not None:
@@ -165,9 +183,8 @@ class SockSyncFunction(SockSyncGroup):
         id_ = data["id"]
 
         if func == "call" and socket.subscribed(self):
-            return dict(**self._to_json(), func="return", id=id_, value=self.function(**data.get("args", {})))
-        elif func == "return":
-            if id_ in self._ignore_returns:
-                self._ignore_returns.remove(id_)
-            else:
-                self._returns[id_] = data.get("value", None)
+            Thread(target=self._function_call_wrapper, args=(id_, data, socket)).start()
+            print("done")
+
+    def _function_call_wrapper(self, id_: str, data: dict, socket: _SockSyncSocket):
+        socket.send_json(dict(**self._to_json(), func="return", id=id_, value=self.function(**data.get("args", {}))))
