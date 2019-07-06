@@ -10,13 +10,19 @@ from socksync.utils import dict_without_none
 
 _SockSyncGroup = 'SockSyncGroup'
 _SockSyncVariable = 'SockSyncVariable'
+_SockSyncList = 'SockSyncList'
 _SockSyncFunction = 'SockSyncFunction'
+
 
 class SockSyncSocket(ABC):
     @abstractmethod
     def register_variable(self, var: _SockSyncVariable):
         pass
-    
+
+    @abstractmethod
+    def register_list(self, var: _SockSyncList):
+        pass
+
     @abstractmethod
     def register_function(self, var: _SockSyncFunction):
         pass
@@ -52,6 +58,9 @@ class SockSyncConsumer(WebsocketConsumer, SockSyncSocket):
 
     def register_variable(self, var: _SockSyncVariable):
         self._variables[var.name] = var
+
+    def register_list(self, var: _SockSyncList):
+        self._lists[var.name] = var
 
     def register_function(self, function: _SockSyncFunction):
         self._functions[function.name] = function
@@ -133,6 +142,7 @@ class SockSyncConsumer(WebsocketConsumer, SockSyncSocket):
     def subscribed(self, group: _SockSyncGroup) -> bool:
         return group in self._subscription_groups
 
+    # TODO: Send set when someone subscribes
     def subscribe(self, group: _SockSyncGroup):
         if not group._subscribable:
             raise Exception("Group is not subscribable!")
