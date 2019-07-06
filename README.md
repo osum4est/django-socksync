@@ -124,12 +124,13 @@ Set the entire list or respond to a `get` request. This should *replace* the exi
 }
 ```
 
-Add an item:
+Insert an item:
 ```json5
 {
-  "func": "add",
+  "func": "insert",
   "type": "list",
   "name": "...",
+  "index": "...",
   "id": "...",
   "value": "..."
 }
