@@ -97,7 +97,9 @@ Set the value of a parameter or respond to a `get` request:
 ### Lists
 If a list or database table is requested, a change func can be provided instead of sending the whole list each time it 
 changes. This requires each object in the array to have a unique "id" field. Related tables can be handled by passing 
-the id of related field with each list item and making separate variable/list calls.
+the id of related field with each list item and making separate variable/list calls. Lists are ordered and support
+pagination. A client should allow the user to set a maximum page size for a list to prevent too many items being sent.
+Updates are only sent for items that are on the current page (except for total item count updates).
 
 Request a list:
 ```json5
@@ -105,7 +107,9 @@ Request a list:
   "func": "get",
   "type": "list",
   "name": "...",
-  "id": "..."  // Optional, use if you just want one item in a list. A set func will be returned
+  "page": "...",             // Optional, if not provided the first page will be sent (zero-indexed)
+  "page_size": "...",        // Optional, if not provided the owner will use their max page size
+  "id": "..."                // Optional, use if you just want one item in a list. A set func will be returned
 }
 ```
 
@@ -115,12 +119,25 @@ Set the entire list or respond to a `get` request. This should *replace* the exi
   "func": "set_all",
   "type": "list",
   "name": "...",
+  "page": "...",
+  "total_item_count": "...",
   "items": [
     {
       "id": "...",
       "value": "..."
     }
   ]
+}
+```
+
+Set the total item count. This should only be sent if an insert or delete func was not sent. (if an item is added or 
+removed but not on the current page):
+```json
+{
+  "func": "set_count",
+  "type": "list",
+  "name": "...",
+  "total_item_count": "..."
 }
 ```
 
