@@ -4,7 +4,9 @@ from threading import Lock, Thread
 from typing import Set, cast, TypeVar, Generic, Callable, Dict, Optional, List
 from uuid import uuid4
 
-from django.db.models.signals import post_save
+from django.core.paginator import Paginator
+from django.db.models import Model, QuerySet
+from django.db.models.signals import post_save, post_delete
 
 _SockSyncSocket = 'SockSyncSocket'
 _SockSyncConsumer = 'SockSyncConsumer'
@@ -30,10 +32,10 @@ class SockSyncGroup(ABC):
     def _handle_func(self, func: str, data: dict = None, socket: _SockSyncSocket = None) -> Optional[dict]:
         pass
 
-    def _add_subscriber_socket(self, socket: _SockSyncSocket):
+    def _socket_subscribed(self, socket: _SockSyncSocket):
         self._subscriber_sockets.add(socket)
 
-    def _remove_subscriber_socket(self, socket: _SockSyncSocket):
+    def _socket_unsubscribed(self, socket: _SockSyncSocket):
         self._subscriber_sockets.remove(socket)
 
     def _send_json(self, data: dict, ignore_socket: _SockSyncSocket = None):
@@ -88,10 +90,17 @@ class SockSyncListItem(SockSyncGroup):
 
 
 class SockSyncList(SockSyncGroup):
-    def __init__(self, name: str):
+    def __init__(self, name: str, page_size: int = 10):
         super().__init__(name, "list")
+        self.page_size = page_size
         self._id_map: Dict[str, int] = {}
         self._values: List[SockSyncListItem] = []
+        self._count = 0
+        self._current_page = 0
+        self._subscriber_pages: Dict[_SockSyncSocket, (int, int)] = {}
+
+    def count(self):
+        return self._count
 
     def get(self, id_: str) -> any:
         return self._values[self._id_map[id_]].value
@@ -101,14 +110,16 @@ class SockSyncList(SockSyncGroup):
         self._values.insert(index, SockSyncListItem(id_, value))
         for i in range(index, len(self._values)):
             self._id_map[self._values[i].id] = i
-        self._send_json(dict(func="insert", id=id_, value=value, index=index, **self._to_json()), ignore_socket)
+        self._send_json_page(id_, dict(func="insert", id=id_, value=value, index=index, **self._to_json()),
+                             ignore_socket)
+        self._count += 1
 
     def append(self, value: any, id_: str = None):
         self.insert(len(self._values), value, id_)
 
     def set(self, id_: str, value: any, ignore_socket: _SockSyncSocket = None):
-        self._values[self._id_map[id_]] = SockSyncListItem(id_, value)
-        self._send_json(self._handle_func("get", dict(id=id_, **self._to_json())), ignore_socket)
+        self._values[self._id_map[id_]].value = value
+        self._send_json_page(id_, self._handle_func("get", dict(id=id_, **self._to_json())), ignore_socket)
 
     def delete(self, id_: str, ignore_socket: _SockSyncSocket = None):
         index = self._id_map[id_]
@@ -116,33 +127,56 @@ class SockSyncList(SockSyncGroup):
         self._id_map.pop(id_)
         for i in range(index, len(self._values) - 1):
             self._id_map[self._values[i].id] = i
-        self._send_json(dict(func="delete", id=id_, **self._to_json()), ignore_socket)
+        self._send_json_page(id_, dict(func="delete", id=id_, **self._to_json()), ignore_socket)
+        self._count -= 1
 
     def __getitem__(self, item: int) -> any:
         return self._values[item].value
 
     def __setitem__(self, key: int, value: any):
-        id_ = str(uuid4())
-        self._id_map.pop(self._values[key].id)
-        self._values[key] = SockSyncListItem(id_, value)
-        self._id_map[id_] = key
-        self._send_json(self._handle_func("get", dict(id=id_)))
+        id_ = self._values[key].id
+        self._values[key].value = value
+        self._send_json_page(id_, self._handle_func("get", dict(id=id_)))
+
+    def _send_json_page(self, id_: str, json: dict, ignore_socket: _SockSyncSocket = None):
+        index = self._id_map[id_]
+        for socket in self._subscriber_sockets:
+            page, page_size = self._subscriber_pages[socket]
+            if socket != ignore_socket and (page * page_size <= index < page * page_size + page_size):
+                cast(_SockSyncConsumer, socket).send_json(json)
+
+    def _socket_subscribed(self, socket: _SockSyncSocket):
+        super()._socket_subscribed(socket)
+        self._subscriber_pages[socket] = (0, self.page_size)
+
+    def _socket_unsubscribed(self, socket: _SockSyncSocket):
+        super()._socket_unsubscribed(socket)
+        self._subscriber_pages.pop(socket, None)
 
     def _handle_func(self, func: str, data: dict = None, socket: _SockSyncSocket = None) -> Optional[dict]:
         # TODO: Send error at end of this if invalid (and for vars and functions)
         # TODO: Catch id key errors
-        id_ = data.get("id", None)
+        id_ = data.get("id", None)  # TODO: and subscribed
         if func == "get":
+            page_size = min(self.page_size, data.get("page_size", self.page_size))
+            paginator = Paginator(self._values, page_size)
+            page = max(0, min(data.get("page", 0), paginator.num_pages - 1))
+            self._subscriber_pages[socket] = (page, page_size)
+
             if id_ is None:
-                return dict(func="set_all", items=[v._to_json() for v in self._values], **self._to_json())
+                return dict(func="set_all", **self._to_json(), page=page, total_item_count=self.count(),
+                            items=[v._to_json() for v in paginator.get_page(page + 1)])
             else:
                 if id_ in self._id_map:
                     return dict(func="set", id=id_, value=self._values[self._id_map[id_]].value, **self._to_json())
                 else:
                     socket.send_name_error(self.type, self.name, id_)
                     return
+
         elif func == "set_all" and "items" in data:
             self._values = [SockSyncListItem(i["id"], i["value"]) for i in data["items"] if "id" in i and "value" in i]
+            self._current_page = data["page"]
+            self._count = data["total_item_count"]
             self._send_json(data, socket)
         elif func == "insert" and "index" in data and "value" in "data" and id_ is not None:
             self.insert(data["index"], data["value"], id_, socket)
@@ -153,17 +187,21 @@ class SockSyncList(SockSyncGroup):
 
 
 class SockSyncModelList(SockSyncList):
-    def __init__(self, model):
-        self.model = model
+    def __init__(self, name: str, model: Model, query: QuerySet = None):
+        super().__init__(name)
+        self.model: Model = model
+        self.query = query
+        if query is None:
+            self.query = model.objects.all()
+
         post_save.connect(self._model_post_save, sender=model)
+        post_delete.connect(self._model_post_delete, sender=model)
 
-    def get(self, index: int) -> object:
+    def _model_post_save(self, sender, **kwargs):
+        print(kwargs)
         pass
 
-    def set(self, index: int, value: object):
-        pass
-
-    def _model_post_save(self):
+    def _model_post_delete(self, sender, **kwargs):
         pass
 
 

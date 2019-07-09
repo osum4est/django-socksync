@@ -126,11 +126,11 @@ class SockSyncConsumer(WebsocketConsumer, SockSyncSocket):
 
             if func == "subscribe":
                 self._subscriber_groups.add(socket_group)
-                socket_group._add_subscriber_socket(self)
+                socket_group._socket_subscribed(self)
                 return
             elif func == "unsubscribe":
                 self._subscriber_groups.remove(socket_group)
-                socket_group._remove_subscriber_socket(self)
+                socket_group._socket_unsubscribed(self)
                 return
 
             data = socket_group._handle_func(func, data, self)
@@ -163,7 +163,7 @@ class SockSyncConsumer(WebsocketConsumer, SockSyncSocket):
 
     def remove_all_subscribers(self):
         for group in self._subscriber_groups:
-            group._remove_subscriber_socket(self)
+            group._socket_unsubscribed(self)
         self._subscriber_groups.clear()
 
     def send_name_error(self, type_: str, name: str, id_: str = None):
