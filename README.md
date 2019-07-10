@@ -62,8 +62,8 @@ Install and start redis:
 Every message must at least include a `func` parameter that tells the other side of the connection what to do. The 
 `type` parameter is used to describe what type of data we performing the function on. `name` refers to the name of the
 data. By default neither side of the connection receives any sets or function calls from the other side. To receive
-these they must be subscribed to. Every function should work on both the client and the server, so data can by synced
-bidirectionally. 
+these they must be subscribed to. Every subscription works one-way, bidirectional syncing is not supported. Any client
+should handle both providing data and subscribing to data (there is no distinction between a 'client' and a 'server').
 
 **Note**: All requests that attempt to modify data (`set`, `set_all`, `add`, `delete`, and function calls) are ignored 
 if the receiver of the request hasn't subscribed to that item. This should be checked on both sides, in the case of a 
