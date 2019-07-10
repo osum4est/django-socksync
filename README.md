@@ -73,7 +73,9 @@ nonconforming client. This ensures that data only gets changed if that side allo
 **All fields are required unless marked otherwise!**
 
 ### Variables
-A single variable can be bound and contain anything that json supports.
+A single variable can be bound and contain anything that json supports. 
+
+A `set` func is returned when a client subscribes.
 
 Request a parameter:
 ```json5
@@ -99,7 +101,9 @@ If a list or database table is requested, a change func can be provided instead 
 changes. This requires each object in the array to have a unique "id" field. Related tables can be handled by passing 
 the id of related field with each list item and making separate variable/list calls. Lists are ordered and support
 pagination. A client should allow the user to set a maximum page size for a list to prevent too many items being sent.
-Updates are only sent for items that are on the current page (except for total item count updates).
+Updates are only sent for items that are on the current page (except for total item count updates). 
+
+A `set_all` or `set` func is returned when a client subscribes to a list or list item.
 
 Request a list:
 ```json5
@@ -177,7 +181,7 @@ Delete an item:
 ### Functions
 Functions can be used to call a function on the server from the client or vise versa with arguments. Note that a
 function on the server will only be called if the server subscribes to it on all the clients that should have access.
-A `return` is required to be sent anytime a side that's been subscribed to sends a `call`.
+A `return` or `error` is required to be sent anytime a side that's been subscribed to sends a `call`.
 
 Call a function:
 ```json5
@@ -221,7 +225,7 @@ To leave a group and stop receiving updates:
   "func": "unsubscribe",
   "type": "...",             // var, list, or function
   "name": "...",
-  "id": "..."                // Optional, use for list item
+  "id": "..."                // Optional, use for list items
 }
 ```
 
@@ -233,21 +237,35 @@ Or unsubscribe from all updates:
 ```
 
 ### Errors
-Errors for unknown variables, lists, or functions:
+Errors involving variables, lists, or functions:
+
+*Error codes:*
+* 0: Does not exist
+* 1: Invalid func
+* 2: Missing required field
+* 3: Invalid arguments (wrong variable type or wrong/missing function arguments)
+
 ```json5
 {
   "func": "error",
+  "error_code": "...",
   "type": "...",             // var, list, or function
   "name": "...",
-  "id": "...",               // Optional, use for list items
+  "id": "...",               // Optional, use for list items or function calls
   "message": "..."           // Optional, use for more descriptive error messages
 }
 ```
 
 General error for malformed requests or other problems:
+
+*Error codes:*
+* 2: Missing required field
+* 4: Invalid JSON
+* 5: Other
 ```json5
 {
   "func": "error",
-  "message": "..."
+  "error_code": "...",
+  "message": "..."           // Optional, use for more descriptive error messages
 }
 ```
