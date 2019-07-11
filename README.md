@@ -65,10 +65,10 @@ data. By default neither side of the connection receives any sets or function ca
 these they must be subscribed to. Every subscription works one-way, bidirectional syncing is not supported. Any client
 should handle both providing data and subscribing to data (there is no distinction between a 'client' and a 'server').
 
-**Note**: All requests that attempt to modify data (`set`, `set_all`, `add`, `delete`, and function calls) are ignored 
-if the receiver of the request hasn't subscribed to that item. This should be checked on both sides, in the case of a 
-nonconforming client. This ensures that data only gets changed if that side allows it to. Keep in mind that this causes 
-`get` to only work if that side has first subscribed to that data.
+**Note**: All requests that attempt to modify data (`set`, `set_all`, `add`, `delete`, and function calls) will cause 
+an error with code 1 if the receiver of the request hasn't subscribed to that item. This should be checked on both 
+sides, in the case of a bad client. This ensures that data only gets changed if that side allows it to. Keep in mind 
+that this causes `get` to only work if that side has first subscribed to that data.
 
 **All fields are required unless marked otherwise!**
 
@@ -237,32 +237,21 @@ Or unsubscribe from all updates:
 ```
 
 ### Errors
-Errors involving variables, lists, or functions:
+Errors are sent in order to help the user of a client debug their code. There should be *no* errors in a finished
+production environment.
+
+TODO: Add descriptions/examples to error codes
 
 *Error codes:*
-* 1: Invalid name
-* 2: Missing required field
-* 3: Invalid arguments (wrong variable type or wrong/missing function arguments)
+* 1: Invalid func
+* 2: Invalid type
+* 3: Invalid name
+* 4: Invalid id (for list items)
+* 5: Missing required field
+* 6: Invalid arguments (wrong variable type or wrong/missing function arguments)
+* 7: Invalid JSON
+* 8: Other
 
-```json5
-{
-  "func": "error",
-  "error_code": "...",
-  "type": "...",             // var, list, or function
-  "name": "...",
-  "id": "...",               // Optional, use for list items or function calls
-  "message": "..."           // Optional, use for more descriptive error messages
-}
-```
-
-General error for malformed requests or other problems:
-
-*Error codes:*
-* 4: Invalid func
-* 5: Invalid type
-* 2: Missing required field
-* 6: Invalid JSON
-* 7: Other
 ```json5
 {
   "func": "error",
