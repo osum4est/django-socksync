@@ -240,8 +240,7 @@ Or unsubscribe from all updates:
 Errors involving variables, lists, or functions:
 
 *Error codes:*
-* 0: Does not exist
-* 1: Invalid func
+* 1: Invalid name
 * 2: Missing required field
 * 3: Invalid arguments (wrong variable type or wrong/missing function arguments)
 
@@ -259,9 +258,11 @@ Errors involving variables, lists, or functions:
 General error for malformed requests or other problems:
 
 *Error codes:*
+* 4: Invalid func
+* 5: Invalid type
 * 2: Missing required field
-* 4: Invalid JSON
-* 5: Other
+* 6: Invalid JSON
+* 7: Other
 ```json5
 {
   "func": "error",
