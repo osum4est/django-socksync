@@ -240,17 +240,16 @@ Or unsubscribe from all updates:
 Errors are sent in order to help the user of a client debug their code. There should be *no* errors in a finished
 production environment.
 
-TODO: Add descriptions/examples to error codes
-
-*Error codes:*
-* 1: Invalid func
-* 2: Invalid type
-* 3: Invalid name
-* 4: Invalid id (for list items)
-* 5: Missing required field
-* 6: Invalid arguments (wrong variable type or wrong/missing function arguments)
-* 7: Invalid JSON
-* 8: Other
+| Error Code | Name          | Description                                                                       |
+| ---------- | ------------- | --------------------------------------------------------------------------------- |
+| 1          | Invalid func  | The requested func does not exist or is not available for a group.                |
+| 2          | Invalid type  | The requested type does not exist.                                                |
+| 3          | Invalid name  | The requested name has not been registered.                                       |
+| 4          | Invalid id    | If no list item exists with the requested id.                                     |
+| 5          | Missing field | A field that is required for a func is missing.                                   |
+| 6          | Invalid args  | A variable is of the wrong type or the wrong parameters are passed to a function. |
+| 7          | Invalid json  | The sent json could not be parsed.                                                |
+| 8          | Other         | Any other error (recommended to add description in message).                      |
 
 ```json5
 {
