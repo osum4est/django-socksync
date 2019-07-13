@@ -123,6 +123,7 @@ Set the entire list or respond to a `get` request. This should *replace* the exi
   "type": "list",
   "name": "...",
   "page": "...",
+  "page_size": "...",
   "total_item_count": "...",
   "items": [
     {
