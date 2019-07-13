@@ -113,7 +113,6 @@ Request a list:
   "name": "...",
   "page": "...",             // Optional, if not provided the first page will be sent (zero-indexed)
   "page_size": "...",        // Optional, if not provided the owner will use their max page size
-  "id": "..."                // Optional, use if you just want one item in a list. A set func will be returned
 }
 ```
 
@@ -214,8 +213,7 @@ receiving updates:
 {
   "func": "subscribe",
   "type": "...",             // var, list, or function
-  "name": "...",
-  "id": "..."                // Optional, use for list items
+  "name": "..."
 }
 ```
 
@@ -224,8 +222,7 @@ To leave a group and stop receiving updates:
 {
   "func": "unsubscribe",
   "type": "...",             // var, list, or function
-  "name": "...",
-  "id": "..."                // Optional, use for list items
+  "name": "..."
 }
 ```
 
@@ -247,7 +244,7 @@ production environment.
 | 3          | Invalid name  | The requested name has not been registered.                                       |
 | 4          | Invalid id    | If no list item exists with the requested id.                                     |
 | 5          | Missing field | A field that is required for a func is missing.                                   |
-| 6          | Invalid args  | A variable is of the wrong type or the wrong parameters are passed to a function. |
+| 6          | Invalid args  | The wrong parameters are passed to a function.                                    |
 | 7          | Invalid json  | The sent json could not be parsed.                                                |
 | 8          | Other         | Any other error (recommended to add description in message).                      |
 
