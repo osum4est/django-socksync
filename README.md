@@ -239,9 +239,10 @@ production environment.
 | 2          | Invalid type  | The requested type does not exist.                                                |
 | 3          | Invalid name  | The requested name has not been registered.                                       |
 | 4          | Missing field | A field that is required for a func is missing.                                   |
-| 5          | Invalid args  | The wrong parameters are passed to a function.                                    |
-| 6          | Invalid json  | The sent json could not be parsed.                                                |
-| 7          | Other         | Any other error (recommended to add description in message).                      |
+| 5          | Bad index     | An index for a list operation is out of bounds.                                   |
+| 6          | Invalid args  | The wrong parameters are passed to a function.                                    |
+| 7          | Invalid json  | The sent json could not be parsed.                                                |
+| 8          | Other         | Any other error (recommended to add description in message).                      |
 
 ```json5
 {
