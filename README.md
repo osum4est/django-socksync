@@ -98,10 +98,9 @@ Set the value of a parameter or respond to a `get` request:
 
 ### Lists
 If a list or database table is requested, a change func can be provided instead of sending the whole list each time it 
-changes. This requires each object in the array to have a unique "id" field. Related tables can be handled by passing 
-the id of related field with each list item and making separate variable/list calls. Lists are ordered and support
-pagination. A client should allow the user to set a maximum page size for a list to prevent too many items being sent.
-Updates are only sent for items that are on the current page (except for total item count updates). 
+changes.  Lists are ordered and support pagination. A client should allow the user to set a maximum page size for a list 
+to prevent too many items being sent. Updates are only sent for items that are on the current page (except for total 
+item count updates). Indexes start at 0 for each page. 
 
 A `set_all` or `set` func is returned when a client subscribes to a list or list item.
 
@@ -126,10 +125,7 @@ Set the entire list or respond to a `get` request. This should *replace* the exi
   "page_size": "...",
   "total_item_count": "...",
   "items": [
-    {
-      "id": "...",
-      "value": "..."
-    }
+    "..."
   ]
 }
 ```
@@ -152,7 +148,6 @@ Insert an item:
   "type": "list",
   "name": "...",
   "index": "...",
-  "id": "...",
   "value": "..."
 }
 ```
@@ -163,7 +158,7 @@ Change an item:
   "func": "set",
   "type": "list",
   "name": "...",
-  "id": "...",
+  "index": "...",
   "value": "..."
 }
 ```
@@ -174,7 +169,7 @@ Delete an item:
   "func": "delete",
   "type": "list",
   "name": "...",
-  "id": "..."
+  "index": "..."
 }
 ```
 
@@ -243,11 +238,10 @@ production environment.
 | 1          | Invalid func  | The requested func does not exist or is not available for a group.                |
 | 2          | Invalid type  | The requested type does not exist.                                                |
 | 3          | Invalid name  | The requested name has not been registered.                                       |
-| 4          | Invalid id    | If no list item exists with the requested id.                                     |
-| 5          | Missing field | A field that is required for a func is missing.                                   |
-| 6          | Invalid args  | The wrong parameters are passed to a function.                                    |
-| 7          | Invalid json  | The sent json could not be parsed.                                                |
-| 8          | Other         | Any other error (recommended to add description in message).                      |
+| 4          | Missing field | A field that is required for a func is missing.                                   |
+| 5          | Invalid args  | The wrong parameters are passed to a function.                                    |
+| 6          | Invalid json  | The sent json could not be parsed.                                                |
+| 7          | Other         | Any other error (recommended to add description in message).                      |
 
 ```json5
 {
