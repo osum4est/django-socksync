@@ -1,0 +1,3 @@
+<component name="DependencyValidationManager">
+  <scope name="Ignore Protected Member Warning" pattern="file:socksync/groups.py||file:socksync/sockets.py" />
+</component>
