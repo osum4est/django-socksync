@@ -11,8 +11,6 @@ from socksync.errors import SockSyncErrors
 _SockSyncSocket = 'SockSyncSocket'
 
 
-# TODO: Remove all dict() calls
-
 class Group(ABC):
     ReceiveFunction = Callable[[dict, _SockSyncSocket], None]
     SendFunction = Callable[[dict, _SockSyncSocket], Optional[dict]]
