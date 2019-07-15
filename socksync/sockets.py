@@ -1,68 +1,38 @@
 import json
-from abc import ABC, abstractmethod
 from json import JSONDecodeError
 from typing import Set, Dict
 
 from channels.generic.websocket import WebsocketConsumer
 
 from socksync import socksync
-from socksync.utils import dict_without_none
+from socksync.errors import SockSyncErrors
 
-_SockSyncGroup = 'SockSyncGroup'
-_SockSyncVariable = 'SockSyncVariable'
-_SockSyncList = 'SockSyncList'
-_SockSyncFunction = 'SockSyncFunction'
-
-
-class SockSyncSocket(ABC):
-    @abstractmethod
-    def register_variable(self, var: _SockSyncVariable):
-        pass
-
-    @abstractmethod
-    def register_list(self, var: _SockSyncList):
-        pass
-
-    @abstractmethod
-    def register_function(self, var: _SockSyncFunction):
-        pass
-
-    @abstractmethod
-    def subscribed(self, group: _SockSyncGroup) -> bool:
-        pass
-
-    @abstractmethod
-    def subscribe(self, group: _SockSyncGroup):
-        pass
-
-    @abstractmethod
-    def unsubscribe(self, group: _SockSyncGroup):
-        pass
-
-    @abstractmethod
-    def unsubscribe_all(self):
-        pass
+_Group = 'Group'
+_LocalGroup = 'LocalGroup'
+_RemoteGroup = 'RemoteGroup'
+_LocalVariable = 'LocalVariable'
+_LocalList = 'LocalList'
+_LocalFunction = 'LocalFunction'
 
 
-# noinspection PyProtectedMember
-class SockSyncConsumer(WebsocketConsumer, SockSyncSocket):
+class SockSyncSocket(WebsocketConsumer):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
-        self._subscriber_groups: Set[_SockSyncGroup] = set()
-        self._subscription_groups: Set[_SockSyncGroup] = set()
+        self._subscriber_groups: Set[_LocalGroup] = set()
+        self._subscription_groups: Set[_RemoteGroup] = set()
 
-        self._variables: Dict[str, _SockSyncGroup] = {}
-        self._lists: Dict[str, _SockSyncGroup] = {}
-        self._functions: Dict[str, _SockSyncGroup] = {}
+        self._variables: Dict[str, _LocalVariable] = {}
+        self._lists: Dict[str, _LocalList] = {}
+        self._functions: Dict[str, _LocalFunction] = {}
 
-    def register_variable(self, var: _SockSyncVariable):
+    def register_variable(self, var: _LocalVariable):
         self._variables[var.name] = var
 
-    def register_list(self, var: _SockSyncList):
+    def register_list(self, var: _LocalList):
         self._lists[var.name] = var
 
-    def register_function(self, function: _SockSyncFunction):
+    def register_function(self, function: _LocalFunction):
         self._functions[function.name] = function
 
     def connect(self):
@@ -71,23 +41,23 @@ class SockSyncConsumer(WebsocketConsumer, SockSyncSocket):
             socksync.on_new_connection(self)
 
     def disconnect(self, _):
-        self.remove_all_subscribers()
+        self._remove_all_subscribers()
         self._variables.clear()
         self._lists.clear()
         self._functions.clear()
 
-    def receive(self, text_data: dict = None, _=None):
+    def receive(self, text_data: str = None, _=None):
         try:
             request = json.loads(text_data)
         except JSONDecodeError:
-            self.send_general_error("Invalid json.")
+            self._send_error(SockSyncErrors.ERROR_INVALID_JSON, "Invalid json.")
             return
 
-        self.do_request(request)
+        self._do_request(request)
 
-    def do_request(self, request: dict):
+    def _do_request(self, request: dict):
         if "func" not in request:
-            self.send_general_error("func is required.")
+            self._send_error(SockSyncErrors.ERROR_INVALID_FUNC, "func is required.")
             return
         else:
             func = request["func"]
@@ -96,91 +66,66 @@ class SockSyncConsumer(WebsocketConsumer, SockSyncSocket):
             return
 
         if func == "unsubscribe_all":
-            self.remove_all_subscribers()
+            self._remove_all_subscribers()
             return
 
         if "type" not in request:
-            self.send_general_error("type is required.")
+            self._send_error(SockSyncErrors.ERROR_INVALID_TYPE, "type is required.")
             return
         else:
             type_ = request["type"]
 
         if "name" not in request:
-            self.send_general_error("name is required.")
+            self._send_error(SockSyncErrors.ERROR_INVALID_NAME, "name is required.")
             return
         else:
             name = request["name"]
 
         if type_ == "var":
-            self.handle_func(func, type_, self._variables, name, request)
+            self._handle_func(func, self._variables, name, request)
         elif type_ == "list":
-            self.handle_func(func, type_, self._lists, name, request)
+            self._handle_func(func, self._lists, name, request)
         elif type_ == "function":
-            self.handle_func(func, type_, self._functions, name, request)
+            self._handle_func(func, self._functions, name, request)
         else:
-            self.send_general_error("Unsupported type.")
+            self._send_error(SockSyncErrors.ERROR_INVALID_TYPE, f"{type_} is not a valid type.")
 
-    def handle_func(self, func: str, type_: str, socket_groups: Dict[str, _SockSyncGroup], name: str, data: map):
+    def _handle_func(self, func: str, socket_groups: Dict[str, _Group], name: str, data: map):
         if name in socket_groups:
-            socket_group = socket_groups[name]
-
-            if func == "subscribe":
-                self._subscriber_groups.add(socket_group)
-                socket_group._socket_subscribed(self)
-                return
-            elif func == "unsubscribe":
-                self._subscriber_groups.remove(socket_group)
-                socket_group._socket_unsubscribed(self)
-                return
-
-            data = socket_group._handle_func(func, data, self)
-            if data is not None:
-                self.send_json(data)
+            socket_groups[name]._handle_func(func, data, self)
         else:
-            self.send_name_error(type_, name)
-
-    def subscribed(self, group: _SockSyncGroup) -> bool:
-        return group in self._subscription_groups
-
-    # TODO: Send set when someone subscribes
-    def subscribe(self, group: _SockSyncGroup):
-        if not group._subscribable:
-            raise Exception("Group is not subscribable!")
-
-        self.send_json(dict(func="subscribe", **group._to_json()))
-        self._subscription_groups.add(group)
-
-    def unsubscribe(self, group: _SockSyncGroup):
-        if not group._subscribable:
-            raise Exception("Group is not subscribable!")
-
-        self.send_json(dict(func="unsubscribe", **group._to_json()))
-        self._subscription_groups.remove(group)
+            self._send_error(SockSyncErrors.ERROR_INVALID_NAME, f"{name} is not registered.")
 
     def unsubscribe_all(self):
-        self.send_json(dict(func="unsubscribe_all"))
+        self._send_json({'func': "unsubscribe_all"})
+        for group in self._subscription_groups:
+            group._subscribed = False
+
         self._subscription_groups.clear()
 
-    def remove_all_subscribers(self):
+    def _remove_all_subscribers(self):
         for group in self._subscriber_groups:
             group._socket_unsubscribed(self)
         self._subscriber_groups.clear()
 
-    def send_name_error(self, type_: str, name: str, id_: str = None):
-        self.send_json({
-            "func": "error",
-            "type": type_,
-            "name": name,
-            "id": id_
-        }, True)
+    def _add_subscriber(self, group: _LocalGroup):
+        self._subscriber_groups.add(group)
 
-    def send_general_error(self, message: str):
-        self.send_json({
+    def _remove_subscriber(self, group: _LocalGroup):
+        self._subscriber_groups.remove(group)
+
+    def _add_subscription(self, group: _RemoteGroup):
+        self._subscription_groups.add(group)
+
+    def _remove_subscription(self, group: _RemoteGroup):
+        self._subscription_groups.remove(group)
+
+    def _send_error(self, error_code: int, message: str):
+        self._send_json({
             "func": "error",
+            "error_code": error_code,
             "message": message
         })
 
-    def send_json(self, data: dict, strip_none: bool = False):
-        if strip_none:
-            data = dict_without_none(data)
+    def _send_json(self, data: dict):
         self.send(json.dumps(data))

@@ -1,24 +1,27 @@
 import time
 from abc import ABC, abstractmethod
-from threading import Lock, Thread
-from typing import Set, cast, TypeVar, Generic, Callable, Dict, Optional, List
+from threading import Thread
+from typing import Set, Callable, Dict, Optional, List, Tuple, Iterable
 from uuid import uuid4
 
 from django.core.paginator import Paginator
-from django.db.models import Model, QuerySet
-from django.db.models.signals import post_save, post_delete
+
+from socksync.errors import SockSyncErrors
 
 _SockSyncSocket = 'SockSyncSocket'
-_SockSyncConsumer = 'SockSyncConsumer'
 
 
-class SockSyncGroup(ABC):
+# TODO: Remove all dict() calls
+
+class Group(ABC):
+    ReceiveFunction = Callable[[dict, _SockSyncSocket], None]
+    SendFunction = Callable[[dict, _SockSyncSocket], Optional[dict]]
+
     def __init__(self, name: str, type_: str):
         self._name: str = name
         self._type: str = type_
-
-        self._subscriber_sockets: Set[_SockSyncSocket] = set()
-        self._subscribable = True
+        self._receive_functions: Dict[str, Tuple[Group.ReceiveFunction, bool, List[str]]] = {}
+        self._send_functions: Dict[str, Group.SendFunction] = {}
 
     @property
     def name(self) -> str:
@@ -29,19 +32,57 @@ class SockSyncGroup(ABC):
         return self._type
 
     @abstractmethod
-    def _handle_func(self, func: str, data: dict = None, socket: _SockSyncSocket = None) -> Optional[dict]:
+    def _get_sockets(self) -> List[_SockSyncSocket]:
         pass
 
-    def _socket_subscribed(self, socket: _SockSyncSocket):
-        self._subscriber_sockets.add(socket)
+    @abstractmethod
+    def _is_subscribed(self, socket: _SockSyncSocket):
+        pass
 
-    def _socket_unsubscribed(self, socket: _SockSyncSocket):
-        self._subscriber_sockets.remove(socket)
+    def _handle_func(self, func: str, data: dict, socket: _SockSyncSocket):
+        if func not in self._receive_functions:
+            self._send_error(SockSyncErrors.ERROR_INVALID_FUNC, f"{func} is not valid for this group.", socket)
+            return
 
-    def _send_json(self, data: dict, ignore_socket: _SockSyncSocket = None):
-        for socket in self._subscriber_sockets:
-            if socket != ignore_socket:
-                cast(_SockSyncConsumer, socket).send_json(data)
+        if self._receive_functions[func][1] and not self._is_subscribed(socket):
+            self._send_error(SockSyncErrors.ERROR_INVALID_FUNC, f"Subscription required.", socket)
+            return
+
+        for required_field in self._receive_functions[func][2]:
+            if required_field not in data:
+                self._send_error(SockSyncErrors.ERROR_MISSING_FIELD, f"{required_field} is required.", socket)
+                return
+
+        try:
+            self._receive_functions[func][0](data, socket)
+        except Exception as e:
+            self._send_error(SockSyncErrors.ERROR_OTHER, f"{e}", socket)
+
+    def _register_receive(self, func: str, function: ReceiveFunction, require_subscription: bool,
+                          required_fields: List[str] = None):
+        self._receive_functions[func] = (function, require_subscription, required_fields or [])
+
+    def _register_receive_send(self, func: str, response_func: str, require_subscription: bool,
+                               required_fields: List[str] = None):
+        self._register_receive(func, lambda data, socket: self._send_func(response_func, socket, args=data),
+                               require_subscription, required_fields or [])
+
+    def _register_send(self, func: str, function: SendFunction = None):
+        self._send_functions[func] = function or (lambda: {})
+
+    def _send_func(self, func: str, socket: _SockSyncSocket = None, args: dict = None):
+        for s in [socket] if socket is not None else self._get_sockets():
+            data = self._send_functions[func](args, s)
+            if data is not None:
+                s._send_json({'func': func, **self._to_json(), **data})
+
+    def _send_json(self, data: dict, socket: _SockSyncSocket = None):
+        for s in [socket] if socket is not None else self._get_sockets():
+            s._send_json({**self._to_json(), **data})
+
+    @staticmethod
+    def _send_error(error_code: int, message: str, socket: _SockSyncSocket):
+        socket._send_error(error_code, message)
 
     def _to_json(self) -> dict:
         return {
@@ -50,185 +91,290 @@ class SockSyncGroup(ABC):
         }
 
 
-T = TypeVar('T')
+class RemoteGroup(Group, ABC):
+    def __init__(self, name: str, type_: str, socket: _SockSyncSocket):
+        super().__init__(name, type_)
+        self._socket = socket
+        self._subscribed = False
+
+    def _get_sockets(self) -> List[_SockSyncSocket]:
+        return [self._socket]
+
+    def _is_subscribed(self, socket: _SockSyncSocket):
+        return self._socket == socket and self.subscribed
+
+    def subscribe(self):
+        self._send_json({'func': "subscribe"})
+        self._subscribed = True
+        self._socket._add_subscription(self)
+
+    def unsubscribe(self):
+        self._send_json({'func': "unsubscribe"})
+        self._subscribed = False
+        self._socket._remove_subscription(self)
+
+    @property
+    def subscribed(self) -> bool:
+        return self._subscribed
 
 
-class SockSyncVariable(SockSyncGroup, Generic[T]):
-    def __init__(self, name: str, value: T = None):
+class LocalGroup(Group, ABC):
+    def __init__(self, name: str, type_: str):
+        super().__init__(name, type_)
+        self._subscriber_sockets: Set[_SockSyncSocket] = set()
+
+        self._register_receive("subscribe", self._socket_subscribed, False)
+        self._register_receive("unsubscribe", self._socket_unsubscribed, True)
+
+    def _socket_subscribed(self, _, socket: _SockSyncSocket):
+        self._subscriber_sockets.add(socket)
+        socket._add_subscriber(self)
+
+    def _socket_unsubscribed(self, _, socket: _SockSyncSocket):
+        self._subscriber_sockets.remove(socket)
+        socket._remove_subscriber(self)
+
+    def _get_sockets(self) -> List[_SockSyncSocket]:
+        return [s for s in self._subscriber_sockets]
+
+    def _is_subscribed(self, socket: _SockSyncSocket):
+        return socket in self._subscriber_sockets
+
+
+class RemoteVariable(RemoteGroup):
+    def __init__(self, name: str, socket: _SockSyncSocket, subscribe: bool = True):
+        super().__init__(name, "var", socket)
+        socket._register_variable(self)
+        self._value = None
+        self._register_receive("set", self._recv_set, True, ["value"])
+        self._register_send("get")
+
+        if subscribe:
+            self.subscribe()
+            self.get()
+
+    @property
+    def value(self) -> any:
+        return self._value
+
+    def get(self):
+        self._send_func("get")
+
+    def _recv_set(self, data: dict, _):
+        self._value = data["value"]
+
+
+class LocalVariable(LocalGroup):
+    def __init__(self, name: str, value: any = None):
         super().__init__(name, "var")
-        self._value: T = value
-        self._lock: Lock = Lock()
+        self._value = value
 
-    def get(self) -> T:
-        with self._lock:
-            return self._value
+        self._register_receive_send("get", "set", True)
+        self._register_send("set", lambda: {'value': self._value})
 
-    def set(self, new_value: T, ignore_socket: _SockSyncSocket = None):
-        with self._lock:
-            self._value = new_value
-        self._send_json(self._handle_func("get"), ignore_socket)
+    @property
+    def value(self) -> any:
+        return self._value
 
-    def _handle_func(self, func: str, data: dict = None, socket: _SockSyncSocket = None) -> Optional[dict]:
-        # TODO: This is going through if socket is not subscribed
-        if func == "get" and (socket is None or socket.subscribed(self)):
-            return dict(func="set", value=self.get(), **self._to_json())
-        elif func == "set" and "value" in data and socket.subscribed(self):
-            self.set(data["value"], socket)
+    @value.setter
+    def value(self, value):
+        self._value = value
+        self._send_func("set")
 
 
-class SockSyncListItem(SockSyncGroup):
-    def __init__(self, id_: str, value: any):
-        super().__init__(id_, "list_item")
-        self.id = id_
-        self.value = value
+class RemoteList(RemoteGroup):
+    def __init__(self, name: str, socket: _SockSyncSocket, page_size: int = 25, subscribe: bool = True):
+        super().__init__(name, "list", socket)
+        socket._register_list(self)
+        self._items = []
+        self._page = 0
+        self._page_size = page_size
+        self._total_item_count = 0
 
-    def _handle_func(self, func: str, data: dict = None, socket: _SockSyncSocket = None) -> Optional[dict]:
-        pass
+        self._register_receive("set_all", self._recv_set_all, True, ["page", "page_size", "total_item_count", "items"])
+        self._register_receive("set_count", self._recv_set_count, True, ["total_item_count"])
+        self._register_receive("set", self._recv_set, True, ["index", "value"])
+        self._register_receive("insert", self._recv_insert, True, ["index", "value"])
+        self._register_receive("delete", self._recv_delete, True, ["index"])
 
-    def _to_json(self) -> dict:
-        return dict(id=self.id, value=self.value)
+        self._register_send("get", lambda: {"page": self._page, "page_size": self._page_size})
+
+        if subscribe:
+            self.subscribe()
+            self.get()
+
+    @property
+    def items(self) -> Iterable[any]:
+        return (i for i in self._items)
+
+    @property
+    def page(self) -> int:
+        return self._page
+
+    @property
+    def page_size(self) -> int:
+        return self._page_size
+
+    @property
+    def count(self) -> int:
+        return self._total_item_count
+
+    def get(self):
+        self._send_func("get")
+
+    def _recv_set_all(self, data: dict, _):
+        self._page = data["page"]
+        self._page_size = data["page_size"]
+        self._total_item_count = data["total_item_count"]
+        self._items.clear()
+        for item in data["items"]:
+            self._items.append(item["value"])
+
+    def _recv_set_count(self, data: dict, _):
+        self._total_item_count = data["total_item_count"]
+
+    def _recv_set(self, data: dict, socket: _SockSyncSocket):
+        if data["index"] >= len(self._items):
+            self._send_error(SockSyncErrors.ERROR_BAD_INDEX, f"{data['index']} is out of bounds.", socket)
+            return
+
+        self._items[data["index"]] = data["value"]
+
+    def _recv_insert(self, data: dict, _):
+        self._items.insert(data["index"], data["value"])
+        self._total_item_count += 1
+
+    def _recv_delete(self, data: dict, socket: _SockSyncSocket):
+        if data["index"] >= len(self._items):
+            self._send_error(SockSyncErrors.ERROR_BAD_INDEX, f"{data['index']} is out of bounds.", socket)
+            return
+
+        self._items.pop(data["index"])
+        self._total_item_count -= 1
 
 
-class SockSyncList(SockSyncGroup):
-    def __init__(self, name: str, page_size: int = 10):
+class LocalList(LocalGroup):
+    def __init__(self, name: str, items: List[any] = None, max_page_size: int = 25):
         super().__init__(name, "list")
-        self.page_size = page_size
-        self._id_map: Dict[str, int] = {}
-        self._values: List[SockSyncListItem] = []
-        self._count = 0
-        self._current_page = 0
+        self._items = []
+        for item in items:
+            self._items.append(item)
+
+        self._max_page_size = max_page_size
         self._subscriber_pages: Dict[_SockSyncSocket, (int, int)] = {}
 
-    def count(self):
-        return self._count
+        self._register_receive_send("get", "set_all", True)
 
-    def get(self, id_: str) -> any:
-        return self._values[self._id_map[id_]].value
+        self._register_send("set_all", self._send_set_all)
+        self._register_send("set_count", lambda: {"total_item_count": len(self._items)})
+        self._register_send("set", self._send_set)
+        self._register_send("insert", self._send_insert)
+        self._register_send("delete", self._send_delete)
 
-    def insert(self, index: int, value: any, id_: str = None, ignore_socket: _SockSyncSocket = None):
-        id_ = id_ or str(uuid4())
-        self._values.insert(index, SockSyncListItem(id_, value))
-        for i in range(index, len(self._values)):
-            self._id_map[self._values[i].id] = i
-        self._send_json_page(id_, dict(func="insert", id=id_, value=value, index=index, **self._to_json()),
-                             ignore_socket)
-        self._count += 1
+    @property
+    def items(self) -> Iterable[any]:
+        return (i for i in self._items)
 
-    def append(self, value: any, id_: str = None):
-        self.insert(len(self._values), value, id_)
+    def set(self, index, value):
+        self._items[index] = value
+        self._send_func("set", args={'index': index})
 
-    def set(self, id_: str, value: any, ignore_socket: _SockSyncSocket = None):
-        self._values[self._id_map[id_]].value = value
-        self._send_json_page(id_, self._handle_func("get", dict(id=id_, **self._to_json())), ignore_socket)
+    def insert(self, index, value):
+        # TODO: Send delete
+        self._items.insert(index, value)
+        self._send_func("insert", args={"index": index, "value": value})
 
-    def delete(self, id_: str, ignore_socket: _SockSyncSocket = None):
-        index = self._id_map[id_]
-        self._values.pop(index)
-        self._id_map.pop(id_)
-        for i in range(index, len(self._values) - 1):
-            self._id_map[self._values[i].id] = i
-        self._send_json_page(id_, dict(func="delete", id=id_, **self._to_json()), ignore_socket)
-        self._count -= 1
+    def append(self, value):
+        self.insert(len(self._items) - 1, value)
 
-    def __getitem__(self, item: int) -> any:
-        return self._values[item].value
+    def delete(self, index):
+        # TODO: Send insert
+        self._items.pop(index)
+        self._send_func("delete", args={"index": index})
 
-    def __setitem__(self, key: int, value: any):
-        id_ = self._values[key].id
-        self._values[key].value = value
-        self._send_json_page(id_, self._handle_func("get", dict(id=id_)))
+    def _send_set_all(self, args: dict, _) -> Optional[dict]:
+        page = args.get("page", 0)
+        page_size = min(self._max_page_size, args.get("page_size", self._max_page_size))
+        return {
+            "page": page,
+            "page_size": page_size,
+            "total_item_count": len(self._items),
+            "items": [v for v in Paginator(self._items, page_size).get_page(page)]
+        }
 
-    def _send_json_page(self, id_: str, json: dict, ignore_socket: _SockSyncSocket = None):
-        index = self._id_map[id_]
-        for socket in self._subscriber_sockets:
-            page, page_size = self._subscriber_pages[socket]
-            if socket != ignore_socket and (page * page_size <= index < page * page_size + page_size):
-                cast(_SockSyncConsumer, socket).send_json(json)
+    def _send_set(self, args: dict, socket: _SockSyncSocket) -> Optional[dict]:
+        i = args["index"]
+        socket_i = self._get_socket_index(i, socket)
+        if socket_i is not None:
+            return {
+                "index": socket_i,
+                "value": self._items[i]
+            }
 
-    def _socket_subscribed(self, socket: _SockSyncSocket):
-        super()._socket_subscribed(socket)
-        self._subscriber_pages[socket] = (0, self.page_size)
+    def _send_insert(self, args: dict, socket: _SockSyncSocket) -> Optional[dict]:
+        i = args["index"]
+        socket_i = self._get_socket_index(i, socket)
+        if socket_i is not None:
+            return {
+                "index": socket_i,
+                "value": self._items[i]
+            }
+        else:
+            self._send_func("set_count", socket)
 
-    def _socket_unsubscribed(self, socket: _SockSyncSocket):
-        super()._socket_unsubscribed(socket)
-        self._subscriber_pages.pop(socket, None)
+    def _send_delete(self, args: dict, socket: _SockSyncSocket) -> Optional[dict]:
+        i = args["index"]
+        socket_i = self._get_socket_index(i, socket)
+        if socket_i is not None:
+            return {"index": socket_i}
+        else:
+            self._send_func("set_count", socket)
 
-    def _handle_func(self, func: str, data: dict = None, socket: _SockSyncSocket = None) -> Optional[dict]:
-        # TODO: Send error at end of this if invalid (and for vars and functions)
-        # TODO: Catch id key errors
-        id_ = data.get("id", None)  # TODO: and subscribed
-        if func == "get":
-            page_size = min(self.page_size, data.get("page_size", self.page_size))
-            paginator = Paginator(self._values, page_size)
-            page = max(0, min(data.get("page", 0), paginator.num_pages - 1))
-            self._subscriber_pages[socket] = (page, page_size)
-
-            if id_ is None:
-                return dict(func="set_all", **self._to_json(), page=page, total_item_count=self.count(),
-                            items=[v._to_json() for v in paginator.get_page(page + 1)])
-            else:
-                if id_ in self._id_map:
-                    return dict(func="set", id=id_, value=self._values[self._id_map[id_]].value, **self._to_json())
-                else:
-                    socket.send_name_error(self.type, self.name, id_)
-                    return
-
-        elif func == "set_all" and "items" in data:
-            self._values = [SockSyncListItem(i["id"], i["value"]) for i in data["items"] if "id" in i and "value" in i]
-            self._current_page = data["page"]
-            self._count = data["total_item_count"]
-            self._send_json(data, socket)
-        elif func == "insert" and "index" in data and "value" in "data" and id_ is not None:
-            self.insert(data["index"], data["value"], id_, socket)
-        elif func == "set" and "value" in data and id_ is not None:
-            self.set(id_, data["value"], socket)
-        elif func == "delete" and id_ is not None:
-            self.delete(id_, socket)
+    def _get_socket_index(self, i: int, socket: _SockSyncSocket) -> Optional[int]:
+        page, page_size = self._subscriber_pages[socket]
+        if page * page_size <= i < page * page_size + page_size:
+            return i - page * page_size
+        return None
 
 
-class SockSyncModelList(SockSyncList):
-    def __init__(self, name: str, model: Model, query: QuerySet = None):
-        super().__init__(name)
-        self.model: Model = model
-        self.query = query
-        if query is None:
-            self.query = model.objects.all()
-
-        post_save.connect(self._model_post_save, sender=model)
-        post_delete.connect(self._model_post_delete, sender=model)
-
-    def _model_post_save(self, sender, **kwargs):
-        print(kwargs)
-        pass
-
-    def _model_post_delete(self, sender, **kwargs):
-        pass
-
-
-class SockSyncFunction(SockSyncGroup, ABC):
-    def __init__(self, name: str):
-        super().__init__(name, "function")
+# class SockSyncModelList(SockSyncList):
+#     def __init__(self, name: str, model: Model, query: QuerySet = None):
+#         super().__init__(name)
+#         self.model: Model = model
+#         self.query = query
+#         if query is None:
+#             self.query = model.objects.all()
+#
+#         post_save.connect(self._model_post_save, sender=model)
+#         post_delete.connect(self._model_post_delete, sender=model)
+#
+#     def _model_post_save(self, sender, **kwargs):
+#         print(kwargs)
+#         pass
+#
+#     def _model_post_delete(self, sender, **kwargs):
+#         pass
 
 
-class SockSyncFunctionRemote(SockSyncFunction):
-    def __init__(self, name: str):
-        super().__init__(name)
-        self._subscribable = False
+class RemoteFunction(RemoteGroup):
+    def __init__(self, name: str, socket: _SockSyncSocket, subscribe: bool = True):
+        super().__init__(name, "function", socket)
+        socket._register_function(self)
         self._returns: Dict[str, dict] = {}
-        self._ignore_returns: Set[str] = set()
 
-    def call_remote_blocking(self, socket: _SockSyncSocket, **kwargs):
-        if not socket.subscribed(self):
+        self._register_receive("return", self._recv_return, True, ["id"])
+        self._register_send("call", lambda args: {"id": args["id"], "args": args["args"]})
+
+        if subscribe:
+            self.subscribe()
+
+    def call(self, **kwargs):
+        if not self.subscribed:
             return None
 
         id_ = str(uuid4())
-        json = dict(
-            **self._to_json(),
-            func="call",
-            id=id_,
-            args=kwargs)
+        self._send_func("call", args={"id": id_, "args": kwargs})
 
-        socket.send_json(json)
         while id_ not in self._returns:
             time.sleep(.25)
 
@@ -237,50 +383,21 @@ class SockSyncFunctionRemote(SockSyncFunction):
 
         return return_data
 
-    def call_remote_all(self, **kwargs):
-        id_ = str(uuid4())
-        json = dict(
-            **self._to_json(),
-            func="call",
-            id=id_,
-            args=kwargs)
-
-        for socket in self._subscriber_sockets:
-            self._ignore_returns.add(id_)
-            socket.send_json(json)
-            id_ = str(uuid4())
-            json["id"] = id_
-
-    def _handle_func(self, func: str, data: dict = None, socket: _SockSyncSocket = None) -> Optional[dict]:
-        if "id" not in data and socket is not None:
-            socket.send_general_error("id is required.")
-            return None
-
+    def _recv_return(self, data: dict, _):
         id_ = data["id"]
-
-        if func == "call":
-            return dict(**self._to_json(), func="return", id=id_, value="Function is not callable!")
-        elif func == "return":
-            if id_ in self._ignore_returns:
-                self._ignore_returns.remove(id_)
-            else:
-                self._returns[id_] = data.get("value", None)
+        self._returns[id_] = data.get("value", None)
 
 
-class SockSyncFunctionLocal(SockSyncFunction):
+class LocalFunction(LocalGroup):
     def __init__(self, name: str, function: Callable = None):
         super().__init__(name)
         self.function = function
 
-    def _handle_func(self, func: str, data: dict = None, socket: _SockSyncSocket = None) -> Optional[dict]:
-        if "id" not in data and socket is not None:
-            socket.send_general_error("id is required.")
-            return None
+        self._register_receive("call", self._recv_call, True, ["id"])
+        self._register_send("return", lambda args, socket: {"id": args["id"], "value": args["value"]})
 
-        id_ = data["id"]
-
-        if func == "call" and socket.subscribed(self):
-            Thread(target=self._function_call_wrapper, args=(id_, data, socket)).start()
+    def _recv_call(self, data: dict, socket: _SockSyncSocket):
+        Thread(target=self._function_call_wrapper, args=(data["id"], data, socket)).start()
 
     def _function_call_wrapper(self, id_: str, data: dict, socket: _SockSyncSocket):
-        socket.send_json(dict(**self._to_json(), func="return", id=id_, value=self.function(**data.get("args", {}))))
+        self._send_func("return", socket, {"id": id_, "value": self.function(**data.get("args", {}))})

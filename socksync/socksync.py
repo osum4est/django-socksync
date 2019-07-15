@@ -21,4 +21,4 @@ on_new_connection: Callable[[SockSyncSocket], None]
 # def register_list(ss_list: SockSyncList):
 #     registry.lists[ss_list.name] = ss_list
 
-# TODO: Paging, filtering
+# TODO: filtering
