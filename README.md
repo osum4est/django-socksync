@@ -75,8 +75,6 @@ that this causes `get` to only work if that side has first subscribed to that da
 ### Variables
 A single variable can be bound and contain anything that json supports. 
 
-A `set` func is returned when a client subscribes.
-
 Request a parameter:
 ```json5
 {
@@ -101,8 +99,6 @@ If a list or database table is requested, a change func can be provided instead 
 changes.  Lists are ordered and support pagination. A client should allow the user to set a maximum page size for a list 
 to prevent too many items being sent. Updates are only sent for items that are on the current page (except for total 
 item count updates). Indexes start at 0 for each page. 
-
-A `set_all` or `set` func is returned when a client subscribes to a list or list item.
 
 Request a list:
 ```json5
@@ -132,7 +128,7 @@ Set the entire list or respond to a `get` request. This should *replace* the exi
 
 Set the total item count. This should only be sent if an insert or delete func was not sent. (if an item is added or 
 removed but not on the current page):
-```json
+```json5
 {
   "func": "set_count",
   "type": "list",
