@@ -66,7 +66,7 @@ class Group(ABC):
                                require_subscription, required_fields or [])
 
     def _register_send(self, func: str, function: SendFunction = None):
-        self._send_functions[func] = function or (lambda: {})
+        self._send_functions[func] = function or (lambda args, socket: {})
 
     def _send_func(self, func: str, socket: _SockSyncSocket = None, args: dict = None):
         for s in [socket] if socket is not None else self._get_sockets():
@@ -94,6 +94,7 @@ class RemoteGroup(Group, ABC):
         super().__init__(name, type_)
         self._socket = socket
         self._subscribed = False
+        socket.register_group(self)
 
     def _get_sockets(self) -> List[_SockSyncSocket]:
         return [self._socket]
@@ -138,11 +139,14 @@ class LocalGroup(Group, ABC):
     def _is_subscribed(self, socket: _SockSyncSocket):
         return socket in self._subscriber_sockets
 
+    @property
+    def subscribers(self) -> List[_SockSyncSocket]:
+        return self._get_sockets()
+
 
 class RemoteVariable(RemoteGroup):
     def __init__(self, name: str, socket: _SockSyncSocket, subscribe: bool = True):
         super().__init__(name, "var", socket)
-        socket._register_variable(self)
         self._value = None
         self._register_receive("set", self._recv_set, True, ["value"])
         self._register_send("get")
@@ -168,7 +172,7 @@ class LocalVariable(LocalGroup):
         self._value = value
 
         self._register_receive_send("get", "set", True)
-        self._register_send("set", lambda: {'value': self._value})
+        self._register_send("set", lambda args, socket: {'value': self._value})
 
     @property
     def value(self) -> any:
@@ -183,7 +187,6 @@ class LocalVariable(LocalGroup):
 class RemoteList(RemoteGroup):
     def __init__(self, name: str, socket: _SockSyncSocket, page_size: int = 25, subscribe: bool = True):
         super().__init__(name, "list", socket)
-        socket._register_list(self)
         self._items = []
         self._page = 0
         self._page_size = page_size
@@ -195,7 +198,7 @@ class RemoteList(RemoteGroup):
         self._register_receive("insert", self._recv_insert, True, ["index", "value"])
         self._register_receive("delete", self._recv_delete, True, ["index"])
 
-        self._register_send("get", lambda: {"page": self._page, "page_size": self._page_size})
+        self._register_send("get", lambda args, socket: {"page": self._page, "page_size": self._page_size})
 
         if subscribe:
             self.subscribe()
@@ -255,8 +258,9 @@ class LocalList(LocalGroup):
     def __init__(self, name: str, items: List[any] = None, max_page_size: int = 25):
         super().__init__(name, "list")
         self._items = []
-        for item in items:
-            self._items.append(item)
+        if items is not None:
+            for item in items:
+                self._items.append(item)
 
         self._max_page_size = max_page_size
         self._subscriber_pages: Dict[_SockSyncSocket, (int, int)] = {}
@@ -264,7 +268,7 @@ class LocalList(LocalGroup):
         self._register_receive_send("get", "set_all", True)
 
         self._register_send("set_all", self._send_set_all)
-        self._register_send("set_count", lambda: {"total_item_count": len(self._items)})
+        self._register_send("set_count", lambda args, socket: {"total_item_count": len(self._items)})
         self._register_send("set", self._send_set)
         self._register_send("insert", self._send_insert)
         self._register_send("delete", self._send_delete)
@@ -357,11 +361,10 @@ class LocalList(LocalGroup):
 class RemoteFunction(RemoteGroup):
     def __init__(self, name: str, socket: _SockSyncSocket, subscribe: bool = True):
         super().__init__(name, "function", socket)
-        socket._register_function(self)
         self._returns: Dict[str, dict] = {}
 
         self._register_receive("return", self._recv_return, True, ["id"])
-        self._register_send("call", lambda args: {"id": args["id"], "args": args["args"]})
+        self._register_send("call", lambda args, socket: {"id": args["id"], "args": args["args"]})
 
         if subscribe:
             self.subscribe()
@@ -388,7 +391,7 @@ class RemoteFunction(RemoteGroup):
 
 class LocalFunction(LocalGroup):
     def __init__(self, name: str, function: Callable = None):
-        super().__init__(name)
+        super().__init__(name, "function")
         self.function = function
 
         self._register_receive("call", self._recv_call, True, ["id"])

@@ -22,29 +22,20 @@ class SockSyncSocket(WebsocketConsumer):
         self._subscriber_groups: Set[_LocalGroup] = set()
         self._subscription_groups: Set[_RemoteGroup] = set()
 
-        self._variables: Dict[str, _LocalVariable] = {}
-        self._lists: Dict[str, _LocalList] = {}
-        self._functions: Dict[str, _LocalFunction] = {}
+        self._registry: Dict[str, Dict[str, _LocalGroup]] = {"var": {}, "list": {}, "function": {}}
 
-    def register_variable(self, var: _LocalVariable):
-        self._variables[var.name] = var
-
-    def register_list(self, var: _LocalList):
-        self._lists[var.name] = var
-
-    def register_function(self, function: _LocalFunction):
-        self._functions[function.name] = function
+    def register_group(self, var: _LocalGroup):
+        self._registry[var.type][var.name] = var
 
     def connect(self):
         self.accept()
-        if hasattr(socksync, "on_new_connection") and socksync.on_new_connection is not None:
-            socksync.on_new_connection(self)
+        for handler in socksync._new_connection_handlers:
+            handler(self)
 
     def disconnect(self, _):
         self._remove_all_subscribers()
-        self._variables.clear()
-        self._lists.clear()
-        self._functions.clear()
+        for r in self._registry.values():
+            r.clear()
 
     def receive(self, text_data: str = None, _=None):
         try:
@@ -81,20 +72,13 @@ class SockSyncSocket(WebsocketConsumer):
         else:
             name = request["name"]
 
-        if type_ == "var":
-            self._handle_func(func, self._variables, name, request)
-        elif type_ == "list":
-            self._handle_func(func, self._lists, name, request)
-        elif type_ == "function":
-            self._handle_func(func, self._functions, name, request)
+        if type_ in self._registry:
+            if name in self._registry[type_]:
+                self._registry[type_][name]._handle_func(func, request, self)
+            else:
+                self._send_error(SockSyncErrors.ERROR_INVALID_NAME, f"{name} is not registered.")
         else:
             self._send_error(SockSyncErrors.ERROR_INVALID_TYPE, f"{type_} is not a valid type.")
-
-    def _handle_func(self, func: str, socket_groups: Dict[str, _Group], name: str, data: map):
-        if name in socket_groups:
-            socket_groups[name]._handle_func(func, data, self)
-        else:
-            self._send_error(SockSyncErrors.ERROR_INVALID_NAME, f"{name} is not registered.")
 
     def unsubscribe_all(self):
         self._send_json({'func': "unsubscribe_all"})
