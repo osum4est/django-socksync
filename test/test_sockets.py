@@ -100,7 +100,9 @@ def test_receive_unsubscribe_all(socket, local_groups):
 
 
 def test_unsubscribe_all(socket, remote_groups):
+    helpers.reset_send(socket)
     socket.unsubscribe_all()
-    helpers.assert_send_func(socket, "unsubscribe_all", None)
+    helpers.assert_send_func(socket, "unsubscribe_all")
+    helpers.assert_send_call_count(socket, 1)
     for g in remote_groups:
         assert not g.subscribed
