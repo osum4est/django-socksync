@@ -229,7 +229,7 @@ class RemoteList(RemoteGroup):
         self._total_item_count = data["total_item_count"]
         self._items.clear()
         for item in data["items"]:
-            self._items.append(item["value"])
+            self._items.append(item)
 
     def _recv_set_count(self, data: dict, _):
         self._total_item_count = data["total_item_count"]
