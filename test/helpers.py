@@ -1,12 +1,16 @@
 import json
-from typing import Optional
 
 from socksync.groups import Group
 from socksync.utils import dict_without_none
 
 
-def receive_func(socket, func: str, type_: str = None, name: str = None):
-    socket.receive(json.dumps(dict_without_none({"func": func, "type": type_, "name": name})))
+def receive_group_func(socket, func: str, group: Group, args: dict = None):
+    receive_func(socket, func, group.type, group.name, args)
+
+
+def receive_func(socket, func: str, type_: str = None, name: str = None, args: dict = None):
+    socket.receive(
+        json.dumps(dict_without_none({"func": func, "type": type_, "name": name, **({} if args is None else args)})))
 
 
 def reset_send(socket):
@@ -18,10 +22,10 @@ def assert_send_call_count(socket, call_count):
 
 
 def assert_send_group_func(socket, func: str, group: Group, args: dict = None):
-    assert_send_func(socket, func, group.name, group.type, args)
+    assert_send_func(socket, func, group.type, group.name, args)
 
 
-def assert_send_func(socket, func: str, name: str = None, type_: str = None, args: dict = None):
+def assert_send_func(socket, func: str, type_: str = None, name: str = None, args: dict = None):
     data = json.loads(socket.send.call_args[0][0])
     length = 1
 
@@ -34,7 +38,7 @@ def assert_send_func(socket, func: str, name: str = None, type_: str = None, arg
         assert data["type"] == type_
     if args is not None:
         length += len(args)
-        for k, v in args:
+        for k, v in args.items():
             assert data[k] == v
 
     assert len(data) == length

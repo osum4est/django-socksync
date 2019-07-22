@@ -11,7 +11,7 @@ from test import helpers
 @pytest.mark.parametrize("group", [LocalVariable("g"), LocalList("g"), LocalFunction("g")])
 def test_register(socket, group):
     socket.register_group(group)
-    helpers.receive_func(socket, "subscribe", group.type, group.name)
+    helpers.receive_group_func(socket, "subscribe", group)
     helpers.assert_no_send(socket)
 
 
@@ -20,6 +20,7 @@ def test_not_registered(socket, group):
     socket.register_group(group)
     helpers.receive_func(socket, "subscribe", group.type, "missing")
     helpers.assert_send_error(socket, SockSyncErrors.ERROR_INVALID_NAME)
+    helpers.assert_send_call_count(socket, 1)
 
 
 def test_connect(socket):
@@ -37,7 +38,7 @@ def test_connect_handler(socket, f):
 def test_disconnect(socket, group):
     socket.register_group(group)
     socket.disconnect(None)
-    helpers.receive_func(socket, "subscribe", group.type, group.name)
+    helpers.receive_group_func(socket, "subscribe", group)
     helpers.assert_send_error(socket, SockSyncErrors.ERROR_INVALID_NAME)
 
 
@@ -46,7 +47,7 @@ def test_disconnect_then_add(socket, group):
     socket.register_group(group)
     socket.disconnect(None)
     socket.register_group(group)
-    helpers.receive_func(socket, "subscribe", group.type, group.name)
+    helpers.receive_group_func(socket, "subscribe", group)
     helpers.assert_no_send(socket)
 
 
@@ -66,27 +67,27 @@ def test_receive_no_func(socket):
 
 
 def test_receive_invalid_func(socket):
-    socket.receive(json.dumps({"func": "invalid"}))
+    helpers.receive_func(socket, "invalid")
     helpers.assert_send_error(socket, SockSyncErrors.ERROR_INVALID_TYPE)
 
 
 def test_receive_no_type(socket):
-    socket.receive(json.dumps({"func": "subscribe", "name": "a"}))
+    helpers.receive_func(socket, "subscribe", name="a")
     helpers.assert_send_error(socket, SockSyncErrors.ERROR_INVALID_TYPE)
 
 
 def test_receive_invalid_type(socket):
-    socket.receive(json.dumps({"func": "subscribe", "type": "invalid", "name": "a"}))
+    helpers.receive_func(socket, "subscribe", "invalid", "a")
     helpers.assert_send_error(socket, SockSyncErrors.ERROR_INVALID_TYPE)
 
 
 def test_receive_no_name(socket):
-    socket.receive(json.dumps({"func": "subscribe", "type": "var"}))
+    helpers.receive_func(socket, "subscribe", "var")
     helpers.assert_send_error(socket, SockSyncErrors.ERROR_INVALID_NAME)
 
 
 def test_receive_error(socket):
-    socket.receive(json.dumps({"func": "error", "error_code": 0, "message": "error"}))
+    helpers.receive_func(socket, "error", args={"error_code": 0, "message": "error"})
     helpers.assert_no_send(socket)
 
 
