@@ -20,7 +20,6 @@ def test_not_registered(socket, group):
     socket.register_group(group)
     helpers.receive_func(socket, "subscribe", group.type, "missing")
     helpers.assert_send_error(socket, SockSyncErrors.ERROR_INVALID_NAME)
-    helpers.assert_send_call_count(socket, 1)
 
 
 def test_connect(socket):
@@ -101,9 +100,7 @@ def test_receive_unsubscribe_all(socket, local_groups):
 
 
 def test_unsubscribe_all(socket, remote_groups):
-    helpers.reset_send(socket)
     socket.unsubscribe_all()
     helpers.assert_send_func(socket, "unsubscribe_all")
-    helpers.assert_send_call_count(socket, 1)
     for g in remote_groups:
         assert not g.subscribed
