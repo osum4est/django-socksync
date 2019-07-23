@@ -1,3 +1,7 @@
+import json
+import time
+from threading import Thread
+
 from socksync.errors import SockSyncErrors
 from test import helpers
 
@@ -255,3 +259,45 @@ def test_local_list_delete(socket, local_list):
 def test_local_list_delete_unsubscribed(socket, local_list_unsubscribed):
     local_list_unsubscribed.delete(0)
     helpers.assert_no_send(socket)
+
+
+def test_remote_function_return_invalid_id(socket, remote_function):
+    helpers.receive_group_func(socket, "return", remote_function, {"id": "test_id"})
+    helpers.assert_send_error(socket, SockSyncErrors.ERROR_BAD_ID)
+
+
+def test_remote_function_call(socket, remote_function):
+    result = []
+    t = Thread(target=lambda: result.append(remote_function.call(arg1=0, arg2="test")))
+    t.start()
+
+    timeout = time.time() + 10
+    while socket.send.call_count == 0:
+        time.sleep(.1)
+        assert time.time() < timeout
+
+    call_id = json.loads(socket.send.call_args[0][0])["id"]
+    helpers.assert_send_group_func(socket, "call", remote_function,
+                                   {"id": call_id, "args": {"arg1": 0, "arg2": "test"}})
+    helpers.receive_group_func(socket, "return", remote_function, {"id": call_id, "value": "test_return"})
+    t.join()
+    assert result[0] == "test_return"
+
+
+def test_remote_function_call_unsubscribed(socket, remote_function_unsubscribed):
+    remote_function_unsubscribed.call(arg1=0, arg2="test")
+    helpers.assert_no_send(socket)
+
+
+def test_local_function_call(socket, local_function, f):
+    f.return_value = "test_return"
+    helpers.receive_group_func(socket, "call", local_function, {"id": "test_id", "args": {"arg1": 0, "arg2": "test"}})
+    f.assert_called_once_with(**{"arg1": 0, "arg2": "test"})
+    helpers.assert_send_group_func(socket, "return", local_function, {"id": "test_id", "value": "test_return"})
+
+
+def test_local_function_call_unsubscribed(socket, local_function_unsubscribed, f):
+    helpers.receive_group_func(socket, "call", local_function_unsubscribed,
+                               {"id": "test_id", "args": {"arg1": 0, "arg2": "test"}})
+    f.assert_not_called()
+    helpers.assert_send_error(socket, SockSyncErrors.ERROR_INVALID_FUNC)

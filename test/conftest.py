@@ -87,3 +87,32 @@ def local_list_unsubscribed(socket):
     lst = LocalList("test", [1, 2, 3])
     socket.register_group(lst)
     return lst
+
+
+@fixture
+def remote_function(socket):
+    fun = RemoteFunction("test", socket)
+    helpers.reset_send(socket)
+    return fun
+
+
+@fixture
+def remote_function_unsubscribed(socket):
+    fun = RemoteFunction("test", socket, False)
+    helpers.reset_send(socket)
+    return fun
+
+
+@fixture
+def local_function(socket, f):
+    fun = LocalFunction("test", f)
+    socket.register_group(fun)
+    helpers.receive_group_func(socket, "subscribe", fun)
+    return fun
+
+
+@fixture
+def local_function_unsubscribed(socket, f):
+    fun = LocalFunction("test", f)
+    socket.register_group(fun)
+    return fun
