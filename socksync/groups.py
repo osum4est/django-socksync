@@ -363,7 +363,8 @@ class LocalList(LocalGroup):
 class RemoteFunction(RemoteGroup):
     def __init__(self, name: str, socket: _SockSyncSocket, subscribe: bool = True):
         super().__init__(name, "function", socket)
-        self._returns: Dict[str, dict] = {}
+        self._calls: Set[str] = set()
+        self._returns: Dict[str, any] = {}
 
         self._register_receive("return", self._recv_return, True, ["id"])
         self._register_send("call", lambda args, socket: {"id": args["id"], "args": args["args"]})
@@ -376,6 +377,7 @@ class RemoteFunction(RemoteGroup):
             return None
 
         id_ = str(uuid4())
+        self._calls.add(id_)
         self._send_func("call", args={"id": id_, "args": kwargs})
 
         while id_ not in self._returns:
@@ -383,11 +385,15 @@ class RemoteFunction(RemoteGroup):
 
         return_data = self._returns[id_]
         self._returns.pop(id_)
+        self._calls.remove(id_)
 
         return return_data
 
-    def _recv_return(self, data: dict, _):
+    def _recv_return(self, data: dict, socket: _SockSyncSocket):
         id_ = data["id"]
+        if id_ not in self._calls:
+            self._send_error(SockSyncErrors.ERROR_BAD_ID, f"{id_} is not a valid function call.", socket)
+
         self._returns[id_] = data.get("value", None)
 
 
