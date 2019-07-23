@@ -1,3 +1,5 @@
+# TODO: Make int fields ints
+
 # Django SockSync
 Easily bind django model data with a websocket client.
 
@@ -236,7 +238,7 @@ production environment.
 | 3          | Invalid name  | The requested name has not been registered.                                       |
 | 4          | Missing field | A field that is required for a func is missing.                                   |
 | 5          | Bad index     | An index for a list operation is out of bounds.                                   |
-| 6          | Invalid args  | The wrong parameters are passed to a function.                                    |
+| 6          | Bad id        | An id for a function return is invalid.                                           |
 | 7          | Invalid json  | The sent json could not be parsed.                                                |
 | 8          | Other         | Any other error (recommended to add description in message).                      |
 
