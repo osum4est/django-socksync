@@ -52,42 +52,40 @@ def test_remote_variable_get(socket, remote_variable):
 
 
 def test_remote_variable_set(socket, remote_variable):
-    helpers.receive_group_func(socket, "set", remote_variable, args={"value": 10})
+    helpers.receive_group_func(socket, "set", remote_variable, {"value": 10})
     helpers.assert_no_send(socket)
     assert remote_variable.value == 10
 
 
 def test_remote_variable_set_unsubscribed(socket, remote_variable_unsubscribed):
-    helpers.receive_group_func(socket, "set", remote_variable_unsubscribed, args={"value": 10})
+    helpers.receive_group_func(socket, "set", remote_variable_unsubscribed, {"value": 10})
     helpers.assert_send_error(socket, SockSyncErrors.ERROR_INVALID_FUNC)
     assert remote_variable_unsubscribed.value is None
 
 
 def test_local_variable_get(socket, local_variable):
-    helpers.receive_group_func(socket, "subscribe", local_variable)
     helpers.receive_group_func(socket, "get", local_variable)
-    helpers.assert_send_group_func(socket, "set", local_variable, args={"value": 10})
+    helpers.assert_send_group_func(socket, "set", local_variable, {"value": 10})
 
 
-def test_local_variable_get_unsubscribed(socket, local_variable):
-    helpers.receive_group_func(socket, "get", local_variable)
+def test_local_variable_get_unsubscribed(socket, local_variable_unsubscribed):
+    helpers.receive_group_func(socket, "get", local_variable_unsubscribed)
     helpers.assert_send_error(socket, SockSyncErrors.ERROR_INVALID_FUNC)
 
 
 def test_local_variable_set(socket, local_variable):
-    helpers.receive_group_func(socket, "subscribe", local_variable)
     local_variable.value = 20
-    helpers.assert_send_group_func(socket, "set", local_variable, args={"value": 20})
+    helpers.assert_send_group_func(socket, "set", local_variable, {"value": 20})
 
 
-def test_local_variable_set_unsubscribed(socket, local_variable):
-    local_variable.value = 20
+def test_local_variable_set_unsubscribed(socket, local_variable_unsubscribed):
+    local_variable_unsubscribed.value = 20
     helpers.assert_no_send(socket)
 
 
 def test_remote_list_get(socket, remote_list):
     remote_list.get()
-    helpers.assert_send_group_func(socket, "get", remote_list, args={"page": 0, "page_size": 5})
+    helpers.assert_send_group_func(socket, "get", remote_list, {"page": 0, "page_size": 5})
     assert len(list(remote_list.items)) == 0
     assert remote_list.page == 0
     assert remote_list.page_size == 5
@@ -117,69 +115,143 @@ def test_remote_list_set_all_missing_field(socket, remote_list):
 
 
 def test_remote_list_set_count(socket, remote_list):
-    helpers.receive_group_func(socket, "set_count", remote_list, args={"total_item_count": 50})
+    helpers.receive_group_func(socket, "set_count", remote_list, {"total_item_count": 50})
     helpers.assert_no_send(socket)
     assert remote_list.count == 50
 
 
 def test_remote_list_set_count_unsubscribed(socket, remote_list_unsubscribed):
-    helpers.receive_group_func(socket, "set_count", remote_list_unsubscribed, args={"total_item_count": 50})
+    helpers.receive_group_func(socket, "set_count", remote_list_unsubscribed, {"total_item_count": 50})
     helpers.assert_send_error(socket, SockSyncErrors.ERROR_INVALID_FUNC)
     assert remote_list_unsubscribed.count == 0
 
 
 def test_remote_list_set(socket, remote_list):
     helpers.init_remote_list(socket, remote_list)
-    helpers.receive_group_func(socket, "set", remote_list, args={"index": 0, "value": "test"})
+    helpers.receive_group_func(socket, "set", remote_list, {"index": 0, "value": "test"})
     helpers.assert_no_send(socket)
     assert list(remote_list.items) == ["test", 2, 3]
     assert remote_list.count == 20
 
 
 def test_remote_list_set_unsubscribed(socket, remote_list_unsubscribed):
-    helpers.receive_group_func(socket, "set", remote_list_unsubscribed, args={"index": 0, "value": "test"})
+    helpers.receive_group_func(socket, "set", remote_list_unsubscribed, {"index": 0, "value": "test"})
     helpers.assert_send_error(socket, SockSyncErrors.ERROR_INVALID_FUNC)
     assert len(list(remote_list_unsubscribed.items)) == 0
 
 
 def test_remote_list_set_out_of_bounds(socket, remote_list):
     helpers.init_remote_list(socket, remote_list)
-    helpers.receive_group_func(socket, "set", remote_list, args={"index": 3, "value": 1})
+    helpers.receive_group_func(socket, "set", remote_list, {"index": 3, "value": 1})
     helpers.assert_send_error(socket, SockSyncErrors.ERROR_BAD_INDEX)
     assert list(remote_list.items) == [1, 2, 3]
 
 
 def test_remote_list_insert(socket, remote_list):
     helpers.init_remote_list(socket, remote_list)
-    helpers.receive_group_func(socket, "insert", remote_list, args={"index": 2, "value": "test"})
+    helpers.receive_group_func(socket, "insert", remote_list, {"index": 2, "value": "test"})
     helpers.assert_no_send(socket)
     assert list(remote_list.items) == [1, 2, "test", 3]
     assert remote_list.count == 21
 
 
 def test_remote_list_insert_unsubscribed(socket, remote_list_unsubscribed):
-    helpers.receive_group_func(socket, "insert", remote_list_unsubscribed, args={"index": 2, "value": "test"})
+    helpers.receive_group_func(socket, "insert", remote_list_unsubscribed, {"index": 2, "value": "test"})
     helpers.assert_send_error(socket, SockSyncErrors.ERROR_INVALID_FUNC)
     assert len(list(remote_list_unsubscribed.items)) == 0
 
 
 def test_remote_list_delete(socket, remote_list):
     helpers.init_remote_list(socket, remote_list)
-    helpers.receive_group_func(socket, "delete", remote_list, args={"index": 2})
+    helpers.receive_group_func(socket, "delete", remote_list, {"index": 2})
     helpers.assert_no_send(socket)
     assert list(remote_list.items) == [1, 2]
     assert remote_list.count == 19
 
 
 def test_remote_list_delete_unsubscribed(socket, remote_list_unsubscribed):
-    helpers.receive_group_func(socket, "delete", remote_list_unsubscribed, args={"index": 2})
+    helpers.receive_group_func(socket, "delete", remote_list_unsubscribed, {"index": 2})
     helpers.assert_send_error(socket, SockSyncErrors.ERROR_INVALID_FUNC)
     assert len(list(remote_list_unsubscribed.items)) == 0
 
 
 def test_remote_list_delete_out_of_bounds(socket, remote_list):
     helpers.init_remote_list(socket, remote_list)
-    helpers.receive_group_func(socket, "delete", remote_list, args={"index": 3})
+    helpers.receive_group_func(socket, "delete", remote_list, {"index": 3})
     helpers.assert_send_error(socket, SockSyncErrors.ERROR_BAD_INDEX)
     assert list(remote_list.items) == [1, 2, 3]
     assert remote_list.count == 20
+
+
+def test_local_list_get_page_0(socket, local_list):
+    helpers.receive_group_func(socket, "get", local_list, {"page": 0, "page_size": 2})
+    helpers.assert_send_group_func(socket, "set_all", local_list,
+                                   {"page": 0, "page_size": 2, "total_item_count": 3, "items": [1, 2]})
+
+
+def test_local_list_get_page_1(socket, local_list):
+    helpers.receive_group_func(socket, "get", local_list, {"page": 1, "page_size": 2})
+    helpers.assert_send_group_func(socket, "set_all", local_list,
+                                   {"page": 1, "page_size": 2, "total_item_count": 3, "items": [3]})
+
+
+def test_local_list_get_unsubscribed(socket, local_list_unsubscribed):
+    helpers.receive_group_func(socket, "get", local_list_unsubscribed, {"page": 0, "page_size": 5})
+    helpers.assert_send_error(socket, SockSyncErrors.ERROR_INVALID_FUNC)
+
+
+def test_local_list_set_count_insert(socket, local_list):
+    helpers.receive_group_func(socket, "get", local_list, {"page": 0, "page_size": 2})
+    helpers.reset_send(socket)
+    local_list.append("test")
+    helpers.assert_send_group_func(socket, "set_count", local_list, {"total_item_count": 4})
+
+
+def test_local_list_set_count_delete(socket, local_list):
+    helpers.receive_group_func(socket, "get", local_list, {"page": 0, "page_size": 2})
+    helpers.reset_send(socket)
+    local_list.delete(2)
+    helpers.assert_send_group_func(socket, "set_count", local_list, {"total_item_count": 2})
+
+
+def test_local_list_set_count_unsubscribed(socket, local_list_unsubscribed):
+    local_list_unsubscribed.append("test")
+    local_list_unsubscribed.delete(2)
+    helpers.assert_no_send(socket)
+
+
+def test_local_list_set(socket, local_list):
+    local_list.set(0, "test")
+    helpers.assert_send_group_func(socket, "set", local_list, {"index": 0, "value": "test"})
+
+
+def test_local_list_set_out_of_bounds(socket, local_list):
+    helpers.receive_group_func(socket, "get", local_list, {"page": 0, "page_size": 2})
+    helpers.reset_send(socket)
+    local_list.set(2, "test")
+    helpers.assert_no_send(socket)
+
+
+def test_local_list_set_unsubscribed(socket, local_list_unsubscribed):
+    local_list_unsubscribed.set(0, "test")
+    helpers.assert_no_send(socket)
+
+
+def test_local_list_insert(socket, local_list):
+    local_list.insert(0, "test")
+    helpers.assert_send_group_func(socket, "insert", local_list, {"index": 0, "value": "test"})
+
+
+def test_local_list_insert_unsubscribed(socket, local_list_unsubscribed):
+    local_list_unsubscribed.insert(0, "test")
+    helpers.assert_no_send(socket)
+
+
+def test_local_list_delete(socket, local_list):
+    local_list.delete(0)
+    helpers.assert_send_group_func(socket, "delete", local_list, {"index": 0})
+
+
+def test_local_list_delete_unsubscribed(socket, local_list_unsubscribed):
+    local_list_unsubscribed.delete(0)
+    helpers.assert_no_send(socket)

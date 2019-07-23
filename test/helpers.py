@@ -58,7 +58,7 @@ def assert_no_send(socket):
 
 def init_remote_list(socket, remote_list, assert_success=True):
     receive_group_func(socket, "set_all", remote_list,
-                       args={"page": 1, "page_size": 3, "total_item_count": 20, "items": [1, 2, 3]})
+                       {"page": 1, "page_size": 3, "total_item_count": 20, "items": [1, 2, 3]})
 
     if assert_success:
         assert_no_send(socket)

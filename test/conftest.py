@@ -49,6 +49,14 @@ def remote_variable_unsubscribed(socket):
 def local_variable(socket):
     var = LocalVariable("test", 10)
     socket.register_group(var)
+    helpers.receive_group_func(socket, "subscribe", var)
+    return var
+
+
+@fixture
+def local_variable_unsubscribed(socket):
+    var = LocalVariable("test", 10)
+    socket.register_group(var)
     return var
 
 
@@ -68,6 +76,14 @@ def remote_list_unsubscribed(socket):
 
 @fixture
 def local_list(socket):
+    lst = LocalList("test", [1, 2, 3])
+    socket.register_group(lst)
+    helpers.receive_group_func(socket, "subscribe", lst)
+    return lst
+
+
+@fixture
+def local_list_unsubscribed(socket):
     lst = LocalList("test", [1, 2, 3])
     socket.register_group(lst)
     return lst
