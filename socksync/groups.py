@@ -185,6 +185,7 @@ class LocalVariable(LocalGroup):
 
 
 class RemoteList(RemoteGroup):
+    # TODO: Ability to switch pages
     def __init__(self, name: str, socket: _SockSyncSocket, page_size: int = 25, subscribe: bool = True):
         super().__init__(name, "list", socket)
         self._items = []
@@ -294,14 +295,15 @@ class LocalList(LocalGroup):
         self._items.pop(index)
         self._send_func("delete", args={"index": index})
 
-    def _send_set_all(self, args: dict, _) -> Optional[dict]:
+    def _send_set_all(self, args: dict, socket: _SockSyncSocket) -> Optional[dict]:
         page = args.get("page", 0)
         page_size = min(self._max_page_size, args.get("page_size", self._max_page_size))
+        self._subscriber_pages[socket] = (page, page_size)
         return {
             "page": page,
             "page_size": page_size,
             "total_item_count": len(self._items),
-            "items": [v for v in Paginator(self._items, page_size).get_page(page)]
+            "items": [v for v in Paginator(self._items, page_size).get_page(page + 1)]
         }
 
     def _send_set(self, args: dict, socket: _SockSyncSocket) -> Optional[dict]:
@@ -333,7 +335,7 @@ class LocalList(LocalGroup):
             self._send_func("set_count", socket)
 
     def _get_socket_index(self, i: int, socket: _SockSyncSocket) -> Optional[int]:
-        page, page_size = self._subscriber_pages[socket]
+        page, page_size = self._subscriber_pages.get(socket, (0, self._max_page_size))
         if page * page_size <= i < page * page_size + page_size:
             return i - page * page_size
         return None
