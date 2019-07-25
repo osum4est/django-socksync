@@ -96,6 +96,30 @@ def test_remote_list_get(socket, remote_list):
     assert remote_list.count == 0
 
 
+def test_remote_list_get_page_0(socket, remote_list):
+    helpers.receive_group_func(socket, "set_count", remote_list, {"total_item_count": 10})
+    remote_list.get_page(0)
+    helpers.assert_send_group_func(socket, "get", remote_list, {"page": 0, "page_size": 5})
+    assert len(list(remote_list.items)) == 0
+
+
+def test_remote_list_get_page_1(socket, remote_list):
+    helpers.receive_group_func(socket, "set_count", remote_list, {"total_item_count": 10})
+    remote_list.get_page(1)
+    helpers.assert_send_group_func(socket, "get", remote_list, {"page": 1, "page_size": 5})
+    assert len(list(remote_list.items)) == 0
+
+
+def test_remote_list_pages(socket, remote_list):
+    remote_list.get_page(1)
+    helpers.receive_group_func(socket, "set_count", remote_list, {"total_item_count": 10})
+    assert remote_list.pages == 2
+    helpers.receive_group_func(socket, "set_count", remote_list, {"total_item_count": 14})
+    assert remote_list.pages == 3
+    helpers.receive_group_func(socket, "set_count", remote_list, {"total_item_count": 6})
+    assert remote_list.pages == 2
+
+
 def test_remote_list_set_all(socket, remote_list):
     helpers.init_remote_list(socket, remote_list)
     assert list(remote_list.items) == [1, 2, 3]

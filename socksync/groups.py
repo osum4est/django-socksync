@@ -1,3 +1,4 @@
+import math
 import time
 from abc import ABC, abstractmethod
 from threading import Thread
@@ -185,7 +186,6 @@ class LocalVariable(LocalGroup):
 
 
 class RemoteList(RemoteGroup):
-    # TODO: Ability to switch pages
     def __init__(self, name: str, socket: _SockSyncSocket, page_size: int = 25, subscribe: bool = True):
         super().__init__(name, "list", socket)
         self._items = []
@@ -199,7 +199,7 @@ class RemoteList(RemoteGroup):
         self._register_receive("insert", self._recv_insert, True, ["index", "value"])
         self._register_receive("delete", self._recv_delete, True, ["index"])
 
-        self._register_send("get", lambda args, socket: {"page": self._page, "page_size": self._page_size})
+        self._register_send("get", lambda args, socket: {"page": args["page"], "page_size": self._page_size})
 
         if subscribe:
             self.subscribe()
@@ -214,6 +214,10 @@ class RemoteList(RemoteGroup):
         return self._page
 
     @property
+    def pages(self) -> int:
+        return math.ceil(self._total_item_count / self.page_size)
+
+    @property
     def page_size(self) -> int:
         return self._page_size
 
@@ -222,7 +226,11 @@ class RemoteList(RemoteGroup):
         return self._total_item_count
 
     def get(self):
-        self._send_func("get")
+        self._send_func("get", args={"page": self.page})
+
+    def get_page(self, page: int):
+        page = max(0, min(page, self.pages - 1))
+        self._send_func("get", args={"page": page})
 
     def _recv_set_all(self, data: dict, _):
         self._page = data["page"]
