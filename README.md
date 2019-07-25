@@ -128,8 +128,8 @@ Set the entire list or respond to a `get` request. This should *replace* the exi
 }
 ```
 
-Set the total item count. This should only be sent if an insert or delete func was not sent. (if an item is added or 
-removed but not on the current page):
+Set the total item count. This should be sent any time the number of total items change. (If an `insert` or `delete` is 
+sent a `set_count` needs to be sent as well):
 ```json5
 {
   "func": "set_count",
