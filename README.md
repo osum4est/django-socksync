@@ -99,8 +99,14 @@ Set the value of a parameter or respond to a `get` request:
 ### Lists
 If a list or database table is requested, a change func can be provided instead of sending the whole list each time it 
 changes.  Lists are ordered and support pagination. A client should allow the user to set a maximum page size for a list 
-to prevent too many items being sent. Updates are only sent for items that are on the current page (except for total 
-item count updates). Indexes start at 0 for each page. 
+to prevent too many items being sent. Indexes start at 0 for each page. 
+
+Updates are sent to any client that would expect to see a change to their current page. This means that any change to 
+the clients current page should be sent, as well an any change occurring to previous elements (Inserting or deleting an 
+item at index 0 would cause all elements in the list to shift to the left or right). Inserts and deletes should be sent 
+sequentially in order to keep the client list at the specified page size (deleting an item should cause a new item to be 
+inserted at the end if there are more items in the list, and inserting an item should delete the last item in the list 
+since it is no longer on that page).
 
 Request a list:
 ```json5
