@@ -180,7 +180,7 @@ def test_remote_list_insert(socket, remote_list):
     helpers.receive_group_func(socket, "insert", remote_list, {"index": 2, "value": "test"})
     helpers.assert_no_send(socket)
     assert list(remote_list.items) == [1, 2, "test", 3]
-    assert remote_list.count == 21
+    assert remote_list.count == 20
 
 
 def test_remote_list_insert_unsubscribed(socket, remote_list_unsubscribed):
@@ -194,7 +194,7 @@ def test_remote_list_delete(socket, remote_list):
     helpers.receive_group_func(socket, "delete", remote_list, {"index": 2})
     helpers.assert_no_send(socket)
     assert list(remote_list.items) == [1, 2]
-    assert remote_list.count == 19
+    assert remote_list.count == 20
 
 
 def test_remote_list_delete_unsubscribed(socket, remote_list_unsubscribed):
@@ -267,7 +267,17 @@ def test_local_list_set_unsubscribed(socket, local_list_unsubscribed):
 
 def test_local_list_insert(socket, local_list):
     local_list.insert(0, "test")
+    helpers.assert_send_group_func(socket, "set_count", local_list, {"total_item_count": 4}, True)
     helpers.assert_send_group_func(socket, "insert", local_list, {"index": 0, "value": "test"})
+
+
+def test_local_list_insert_paged(socket, local_list):
+    helpers.receive_group_func(socket, "get", local_list, {"page": 1, "page_size": 2})
+    helpers.reset_send(socket)
+    local_list.insert(0, "test")
+    helpers.assert_send_group_func(socket, "set_count", local_list, {"total_item_count": 4}, True)
+    helpers.assert_send_group_func(socket, "delete", local_list, {"index": 1}, True)
+    helpers.assert_send_group_func(socket, "insert", local_list, {"index": 0, "value": 2})
 
 
 def test_local_list_insert_unsubscribed(socket, local_list_unsubscribed):
@@ -277,7 +287,20 @@ def test_local_list_insert_unsubscribed(socket, local_list_unsubscribed):
 
 def test_local_list_delete(socket, local_list):
     local_list.delete(0)
+    helpers.assert_send_group_func(socket, "set_count", local_list, {"total_item_count": 2}, True)
     helpers.assert_send_group_func(socket, "delete", local_list, {"index": 0})
+
+
+def test_local_list_delete_paged(socket, local_list):
+    local_list.insert(0, 10)
+    local_list.insert(0, 11)
+    local_list.insert(0, 12)
+    helpers.receive_group_func(socket, "get", local_list, {"page": 1, "page_size": 2})
+    helpers.reset_send(socket)
+    local_list.delete(0)
+    helpers.assert_send_group_func(socket, "set_count", local_list, {"total_item_count": 5}, True)
+    helpers.assert_send_group_func(socket, "delete", local_list, {"index": 0}, True)
+    helpers.assert_send_group_func(socket, "insert", local_list, {"index": 1, "value": 2})
 
 
 def test_local_list_delete_unsubscribed(socket, local_list_unsubscribed):

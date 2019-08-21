@@ -17,13 +17,15 @@ def reset_send(socket):
     return socket.send.reset_mock()
 
 
-def assert_send_group_func(socket, func: str, group: Group, args: dict = None):
-    assert_send_func(socket, func, group.type, group.name, args)
+def assert_send_group_func(socket, func: str, group: Group, args: dict = None, multiple: bool = False):
+    assert_send_func(socket, func, group.type, group.name, args, multiple)
 
 
-def assert_send_func(socket, func: str, type_: str = None, name: str = None, args: dict = None):
-    assert socket.send.call_count == 1
-    data = json.loads(socket.send.call_args[0][0])
+def assert_send_func(socket, func: str, type_: str = None, name: str = None, args: dict = None, multiple: bool = False):
+    if not multiple:
+        assert socket.send.call_count == 1
+
+    data = json.loads(socket.send.call_args_list[0][0][0])
     length = 1
 
     assert data["func"] == func
@@ -39,7 +41,12 @@ def assert_send_func(socket, func: str, type_: str = None, name: str = None, arg
             assert data[k] == v
 
     assert len(data) == length
-    reset_send(socket)
+
+    if multiple:
+        socket.send.call_count -= 1
+        socket.send.call_args_list.pop(0)
+    else:
+        reset_send(socket)
 
 
 def assert_send_error(socket, error_code: int):

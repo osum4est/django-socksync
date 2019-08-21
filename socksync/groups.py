@@ -252,7 +252,6 @@ class RemoteList(RemoteGroup):
 
     def _recv_insert(self, data: dict, _):
         self._items.insert(data["index"], data["value"])
-        self._total_item_count += 1
 
     def _recv_delete(self, data: dict, socket: _SockSyncSocket):
         if data["index"] >= len(self._items):
@@ -260,7 +259,6 @@ class RemoteList(RemoteGroup):
             return
 
         self._items.pop(data["index"])
-        self._total_item_count -= 1
 
 
 class LocalList(LocalGroup):
@@ -291,7 +289,6 @@ class LocalList(LocalGroup):
         self._send_func("set", args={'index': index})
 
     def insert(self, index, value):
-        # TODO: Send delete
         self._items.insert(index, value)
         self._send_func("insert", args={"index": index, "value": value})
 
@@ -299,9 +296,16 @@ class LocalList(LocalGroup):
         self.insert(len(self._items) - 1, value)
 
     def delete(self, index):
-        # TODO: Send insert
         self._items.pop(index)
         self._send_func("delete", args={"index": index})
+
+    def _socket_subscribed(self, _, socket: _SockSyncSocket):
+        super()._socket_subscribed(_, socket)
+        self._subscriber_pages[socket] = (0, self._max_page_size)
+
+    def _socket_unsubscribed(self, _, socket: _SockSyncSocket):
+        super()._socket_unsubscribed(_, socket)
+        self._subscriber_pages.pop(socket)
 
     def _send_set_all(self, args: dict, socket: _SockSyncSocket) -> Optional[dict]:
         page = args.get("page", 0)
@@ -316,37 +320,48 @@ class LocalList(LocalGroup):
 
     def _send_set(self, args: dict, socket: _SockSyncSocket) -> Optional[dict]:
         i = args["index"]
-        socket_i = self._get_socket_index(i, socket)
-        if socket_i is not None:
+        socket_i, page_size, page_start, page_end = self._get_socket_index(i, socket)
+        if page_start <= i < page_end:
             return {
                 "index": socket_i,
                 "value": self._items[i]
             }
 
     def _send_insert(self, args: dict, socket: _SockSyncSocket) -> Optional[dict]:
+        self._send_func("set_count", socket)
         i = args["index"]
-        socket_i = self._get_socket_index(i, socket)
-        if socket_i is not None:
-            return {
-                "index": socket_i,
-                "value": self._items[i]
-            }
+        socket_i, page_size, page_start, page_end = self._get_socket_index(i, socket)
+        if i >= page_end:
+            return None
+
+        if page_end <= len(self._items):
+            self._send_json({"func": "delete", "index": page_size - 1}, socket)
+
+        if i < page_start:
+            return {"index": 0, "value": self._items[page_start]}
         else:
-            self._send_func("set_count", socket)
+            return {"index": socket_i, "value": self._items[i]}
 
     def _send_delete(self, args: dict, socket: _SockSyncSocket) -> Optional[dict]:
+        self._send_func("set_count", socket)
         i = args["index"]
-        socket_i = self._get_socket_index(i, socket)
-        if socket_i is not None:
-            return {"index": socket_i}
-        else:
-            self._send_func("set_count", socket)
+        socket_i, page_size, page_start, page_end = self._get_socket_index(i, socket)
+        if i >= page_end:
+            return None
 
-    def _get_socket_index(self, i: int, socket: _SockSyncSocket) -> Optional[int]:
-        page, page_size = self._subscriber_pages.get(socket, (0, self._max_page_size))
-        if page * page_size <= i < page * page_size + page_size:
-            return i - page * page_size
-        return None
+        if i < page_start:
+            self._send_json({"func": "delete", "index": 0})
+        else:
+            self._send_json({"func": "delete", "index": socket_i})
+
+        if page_end - 1 < len(self._items):
+            self._send_json({"func": "insert", "index": page_size - 1, "value": self._items[page_end - 1]}, socket)
+
+    def _get_socket_index(self, i: int, socket: _SockSyncSocket) -> Tuple[Optional[int], int, int, int]:
+        page, page_size = self._subscriber_pages[socket]
+        page_start = page * page_size
+        page_end = page * page_size + page_size
+        return i - page * page_size, page_size, page_start, page_end
 
 
 # class SockSyncModelList(SockSyncList):
