@@ -8,7 +8,7 @@ pytest = "*"
 pytest-mock = "*"
 
 [packages]
-Django = "==2.2.2"
+Django = "==2.2.21"
 channels = "*"
 channels-redis = "*"
 
